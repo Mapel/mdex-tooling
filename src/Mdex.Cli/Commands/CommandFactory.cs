@@ -1,5 +1,6 @@
 using Mdex.Cli.Cli;
 using Mdex.Cli.Commands.Read;
+using Mdex.Cli.Commands.Write;
 
 namespace Mdex.Cli.Commands;
 
@@ -20,6 +21,13 @@ public static class CommandFactory
         r.Add(new SearchTagsCommand());
         r.Add(new ListCommand());
         r.Add(new FindRelatedCommand());
+
+        // Write / intent commands
+        r.Add(new CaptureInboxCommand());
+        r.Add(new CreateCommand());
+        r.Add(new AppendToNoteCommand());
+        r.Add(new AppendToLogCommand());
+        r.Add(new PromoteInboxItemCommand());
 
         return r;
     }
