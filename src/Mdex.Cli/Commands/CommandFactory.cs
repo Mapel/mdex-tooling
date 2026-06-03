@@ -1,6 +1,7 @@
 using Mdex.Cli.Cli;
 using Mdex.Cli.Commands.Read;
 using Mdex.Cli.Commands.Write;
+using Mdex.Cli.Commands.Fs;
 
 namespace Mdex.Cli.Commands;
 
@@ -28,6 +29,13 @@ public static class CommandFactory
         r.Add(new AppendToNoteCommand());
         r.Add(new AppendToLogCommand());
         r.Add(new PromoteInboxItemCommand());
+
+        // Raw FS commands (guarded notausgang)
+        r.Add(new WriteFileCommand());
+        r.Add(new AppendFileCommand());
+        r.Add(new MoveCommand());
+        r.Add(new MkdirCommand());
+        r.Add(new DeleteCommand());
 
         return r;
     }
