@@ -1,0 +1,29 @@
+{
+  "name": "mdex-tooling (.NET 10)",
+  "image": "mcr.microsoft.com/devcontainers/dotnet:1-10.0-bookworm",
+  "features": {
+    "ghcr.io/devcontainers/features/git:1": {}
+  },
+  "customizations": {
+    "vscode": {
+      "extensions": [
+        "ms-dotnettools.csharp",
+        "ms-dotnettools.csdevkit",
+        "ms-dotnettools.vscode-dotnet-runtime"
+      ],
+      "settings": {
+        "dotnet.defaultSolution": "Mdex.sln",
+        "editor.formatOnSave": true,
+        "[csharp]": {
+          "editor.defaultFormatter": "ms-dotnettools.csharp"
+        }
+      }
+    }
+  },
+  "remoteEnv": {
+    "MDEX_ROOT": "${containerWorkspaceFolder}/.vault-test"
+  },
+  "postCreateCommand": "dotnet restore || true",
+  "forwardPorts": [],
+  "portsAttributes": {}
+}
