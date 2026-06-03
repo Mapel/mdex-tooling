@@ -1,0 +1,17 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net10.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <RootNamespace>Mdex.Cli</RootNamespace>
+    <AssemblyName>mdext</AssemblyName>
+    <PackAsTool>true</PackAsTool>
+    <ToolCommandName>mdext</ToolCommandName>
+    <PackageId>Mdex.Cli</PackageId>
+    <Version>0.1.0</Version>
+  </PropertyGroup>
+  <ItemGroup>
+    <PackageReference Include="YamlDotNet" Version="18.*" />
+  </ItemGroup>
+</Project>
