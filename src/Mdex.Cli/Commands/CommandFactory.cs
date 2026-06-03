@@ -1,4 +1,5 @@
 using Mdex.Cli.Cli;
+using Mdex.Cli.Commands.Read;
 
 namespace Mdex.Cli.Commands;
 
@@ -8,7 +9,18 @@ public static class CommandFactory
     {
         var r = new CommandRegistry();
         r.Add(new VersionCommand());
-        // read/write/fs commands are registered here as later tasks add them
+
+        // Read commands
+        r.Add(new SearchCommand());
+        r.Add(new ReadNoteCommand());
+        r.Add(new GetByTagCommand());
+        r.Add(new GetByTypeCommand());
+        r.Add(new GetByDateRangeCommand());
+        r.Add(new ListTagsCommand());
+        r.Add(new SearchTagsCommand());
+        r.Add(new ListCommand());
+        r.Add(new FindRelatedCommand());
+
         return r;
     }
 }
