@@ -10,7 +10,7 @@
 
 > **Design deviations carried from the spec:** in-process instead of subprocess (supersedes 2026-06-01 §5); three roles instead of two (supersedes §2).
 
-> **Known edge case (not fixed here):** `ArgReader` treats any token starting with `--` as a flag, so a `--content` value that itself begins with `--` is dropped. The MCP `*_file`/`append_*`/`capture_inbox` tools pass content via `--content`; content beginning with `--` is therefore unsupported until the CLI gains a `--` end-of-flags separator. Tracked as a follow-up, out of scope for this plan.
+> **Robust argument passing (Task 1B):** `ArgReader` originally treated any token starting with `--` as a flag, so a value (content *or* a positional like a search query) that itself begins with `--` was dropped. Task 1B hardens it with two POSIX/GNU conventions — `--key=value` (attached value, may start with anything) and `--` (end-of-options; remaining tokens are positionals). The MCP tools then build args by one uniform rule: **value-flags as `--key=value`, boolean flags bare, then `--`, then positionals** — bulletproof for any content (newlines, `=`, leading `--`, empty). Backward compatible: the space form `--content "text"` still works.
 
 ---
 
@@ -28,6 +28,7 @@
 src/
   Mdex.Cli/
     Cli/CliDispatcher.cs        NEW  reusable in-process entry → JSON envelope
+    Cli/ArgReader.cs            MOD  --key=value + -- end-of-options (Task 1B)
     Program.cs                  MOD  use CliDispatcher.BuildContext
   Mdex.Tokens/                  NEW  library
     Mdex.Tokens.csproj
@@ -181,6 +182,118 @@ Expected: PASS — all existing tests plus the two new ones.
 ```bash
 git add src/Mdex.Cli/Cli/CliDispatcher.cs src/Mdex.Cli/Program.cs tests/Mdex.Cli.Tests/CliDispatcherTests.cs
 git commit -m "Refactor: extract CliDispatcher for in-process reuse"
+```
+
+---
+
+## Task 1B: Harden `ArgReader` (`--key=value` + `--` end-of-options)
+
+Make argument parsing robust so any user value — content or a positional — survives even when it begins with `--`. This is a CLI improvement that the MCP arg-building (Tasks 13–15) relies on.
+
+**Files:**
+- Modify: `src/Mdex.Cli/Cli/ArgReader.cs:9-26`
+- Test: `tests/Mdex.Cli.Tests/ArgReaderTests.cs`
+
+- [ ] **Step 1: Write the failing test**
+
+```csharp
+// tests/Mdex.Cli.Tests/ArgReaderTests.cs
+using Mdex.Cli.Cli;
+namespace Mdex.Cli.Tests;
+
+public class ArgReaderTests
+{
+    [Fact]
+    public void Equals_form_keeps_leading_dashes_in_value()
+    {
+        var r = new ArgReader(new[] { "--content=--- a dashy line" });
+        Assert.Equal("--- a dashy line", r.Flag("--content"));
+    }
+
+    [Fact]
+    public void Equals_form_allows_empty_value()
+    {
+        var r = new ArgReader(new[] { "--content=" });
+        Assert.Equal("", r.Flag("--content"));
+    }
+
+    [Fact]
+    public void Equals_form_splits_on_first_equals_only()
+    {
+        var r = new ArgReader(new[] { "--content=a=b=c" });
+        Assert.Equal("a=b=c", r.Flag("--content"));
+    }
+
+    [Fact]
+    public void End_of_options_makes_dashy_token_positional()
+    {
+        var r = new ArgReader(new[] { "--", "--weird" });
+        Assert.Equal("--weird", r.Positional(0));
+        Assert.False(r.Has("--weird"));
+    }
+
+    [Fact]
+    public void Flags_before_separator_then_positionals_after()
+    {
+        var r = new ArgReader(new[] { "--maxhops=3", "--recursive", "--", "--weird-slug" });
+        Assert.Equal("3", r.Flag("--maxhops"));
+        Assert.True(r.Has("--recursive"));
+        Assert.Equal("--weird-slug", r.Positional(0));
+    }
+
+    [Fact]
+    public void Space_form_and_boolean_flag_still_work()
+    {
+        var r = new ArgReader(new[] { "--content", "text", "--recursive" });
+        Assert.Equal("text", r.Flag("--content"));
+        Assert.True(r.Has("--recursive"));
+        Assert.Null(r.Flag("--recursive"));
+    }
+}
+```
+
+- [ ] **Step 2: Run test to verify it fails**
+
+Run: `dotnet test tests/Mdex.Cli.Tests --filter ArgReaderTests`
+Expected: FAIL — `Equals_form_*` and `End_of_options_*` fail (value lost / token treated as flag).
+
+- [ ] **Step 3: Rewrite the `ArgReader` constructor**
+
+Replace the constructor body (`src/Mdex.Cli/Cli/ArgReader.cs:9-26`) with:
+
+```csharp
+    public ArgReader(string[] args)
+    {
+        var positionalsOnly = false;
+        for (var i = 0; i < args.Length; i++)
+        {
+            var arg = args[i];
+
+            if (!positionalsOnly && arg == "--") { positionalsOnly = true; continue; }  // end-of-options
+
+            if (!positionalsOnly && arg.StartsWith("--"))
+            {
+                var eq = arg.IndexOf('=');
+                if (eq >= 0) _flags[arg[..eq]] = arg[(eq + 1)..];                        // --key=value
+                else if (i + 1 < args.Length && !args[i + 1].StartsWith("--"))
+                    _flags[arg] = args[++i];                                             // --key value
+                else _flags[arg] = null;                                                // boolean --key
+            }
+            else _positionals.Add(arg);
+        }
+    }
+```
+
+- [ ] **Step 4: Run the new test and the full CLI suite**
+
+Run: `dotnet test tests/Mdex.Cli.Tests`
+Expected: PASS — `ArgReaderTests` green and every pre-existing test still green (the space and boolean forms are unchanged).
+
+- [ ] **Step 5: Commit**
+
+```bash
+git add src/Mdex.Cli/Cli/ArgReader.cs tests/Mdex.Cli.Tests/ArgReaderTests.cs
+git commit -m "Harden ArgReader: --key=value and -- end-of-options"
 ```
 
 ---
@@ -1243,7 +1356,7 @@ public static class ReadTools
         [Description("Search query")] string query)
     {
         auth.Require(Role.Read);
-        return mdex.Call("search", query);
+        return mdex.Call("search", "--", query);   // -- guards a query that starts with --
     }
 
     [McpServerTool, Description("Return a note's frontmatter and body by slug or vault-relative path.")]
@@ -1251,7 +1364,7 @@ public static class ReadTools
         [Description("Note slug or vault-relative path")] string slugOrPath)
     {
         auth.Require(Role.Read);
-        return mdex.Call("read-note", slugOrPath);
+        return mdex.Call("read-note", "--", slugOrPath);
     }
 
     [McpServerTool, Description("Notes carrying all of the given tags.")]
@@ -1259,7 +1372,9 @@ public static class ReadTools
         [Description("One or more tag names")] string[] tags)
     {
         auth.Require(Role.Read);
-        return mdex.Call("get-by-tag", tags);
+        var args = new List<string> { "--" };
+        args.AddRange(tags);
+        return mdex.Call("get-by-tag", args.ToArray());
     }
 
     [McpServerTool, Description("Notes whose frontmatter type matches (inbox|zettel|project|area|reference).")]
@@ -1267,7 +1382,7 @@ public static class ReadTools
         [Description("BRAID type")] string type)
     {
         auth.Require(Role.Read);
-        return mdex.Call("get-by-type", type);
+        return mdex.Call("get-by-type", "--", type);
     }
 
     [McpServerTool, Description("Notes in a created/modified date range. One bound may be omitted (open-ended).")]
@@ -1278,9 +1393,9 @@ public static class ReadTools
     {
         auth.Require(Role.Read);
         var args = new List<string>();
-        if (from is not null) { args.Add("--from"); args.Add(from); }
-        if (to is not null) { args.Add("--to"); args.Add(to); }
-        if (field is not null) { args.Add("--field"); args.Add(field); }
+        if (from is not null) args.Add($"--from={from}");
+        if (to is not null) args.Add($"--to={to}");
+        if (field is not null) args.Add($"--field={field}");
         return mdex.Call("get-by-date-range", args.ToArray());
     }
 
@@ -1296,7 +1411,7 @@ public static class ReadTools
         [Description("Substring to match against tag names")] string pattern)
     {
         auth.Require(Role.Read);
-        return mdex.Call("search-tags", pattern);
+        return mdex.Call("search-tags", "--", pattern);
     }
 
     [McpServerTool, Description("Recursive file/dir tree under an optional vault-relative subpath.")]
@@ -1304,7 +1419,7 @@ public static class ReadTools
         [Description("Vault-relative subpath, or null for the whole vault")] string? path)
     {
         auth.Require(Role.Read);
-        return path is null ? mdex.Call("list") : mdex.Call("list", path);
+        return path is null ? mdex.Call("list") : mdex.Call("list", "--", path);
     }
 
     [McpServerTool, Description("Notes linked via [[wikilinks]] in both directions; depth 1 by default.")]
@@ -1314,9 +1429,11 @@ public static class ReadTools
         [Description("Walk the whole connected component")] bool recursive = false)
     {
         auth.Require(Role.Read);
-        var args = new List<string> { slugOrPath };
-        if (maxHops is not null) { args.Add("--maxhops"); args.Add(maxHops.Value.ToString()); }
+        var args = new List<string>();
+        if (maxHops is not null) args.Add($"--maxhops={maxHops.Value}");
         if (recursive) args.Add("--recursive");
+        args.Add("--");
+        args.Add(slugOrPath);
         return mdex.Call("find-related", args.ToArray());
     }
 }
@@ -1360,7 +1477,7 @@ public static class IntentTools
         [Description("Entry text")] string content)
     {
         auth.Require(Role.WriteIntent);
-        return mdex.Call("capture-inbox", "--content", content);
+        return mdex.Call("capture-inbox", $"--content={content}");
     }
 
     [McpServerTool, Description("Create a typed note (zettel|project|area|reference) with frontmatter + template.")]
@@ -1371,9 +1488,12 @@ public static class IntentTools
         [Description("Named body template override, or null for the default")] string? body = null)
     {
         auth.Require(Role.WriteIntent);
-        var args = new List<string> { type, name };
+        var args = new List<string>();
         if (noBody) args.Add("--no-body");
-        if (body is not null) { args.Add("--body"); args.Add(body); }
+        if (body is not null) args.Add($"--body={body}");
+        args.Add("--");
+        args.Add(type);
+        args.Add(name);
         return mdex.Call("create", args.ToArray());
     }
 
@@ -1383,7 +1503,7 @@ public static class IntentTools
         [Description("Markdown to append")] string content)
     {
         auth.Require(Role.WriteIntent);
-        return mdex.Call("append-to-note", slugOrPath, "--content", content);
+        return mdex.Call("append-to-note", $"--content={content}", "--", slugOrPath);
     }
 
     [McpServerTool, Description("Add a dated bullet under a note's ## Log section (creating it if needed).")]
@@ -1392,7 +1512,7 @@ public static class IntentTools
         [Description("Log entry text (becomes a bullet)")] string content)
     {
         auth.Require(Role.WriteIntent);
-        return mdex.Call("append-to-log", slugOrPath, "--content", content);
+        return mdex.Call("append-to-log", $"--content={content}", "--", slugOrPath);
     }
 
     [McpServerTool, Description("Move an inbox item into a typed folder, rebuilding its frontmatter.")]
@@ -1402,8 +1522,11 @@ public static class IntentTools
         [Description("Optional new name, or null to keep the inbox slug")] string? name = null)
     {
         auth.Require(Role.WriteIntent);
-        var args = new List<string> { inbox, type };
-        if (name is not null) { args.Add("--name"); args.Add(name); }
+        var args = new List<string>();
+        if (name is not null) args.Add($"--name={name}");
+        args.Add("--");
+        args.Add(inbox);
+        args.Add(type);
         return mdex.Call("promote-inbox-item", args.ToArray());
     }
 }
@@ -1448,7 +1571,7 @@ public static class RawFsTools
         [Description("Full file content")] string content)
     {
         auth.Require(Role.FullWrite);
-        return mdex.Call("write-file", path, "--content", content);
+        return mdex.Call("write-file", $"--content={content}", "--", path);
     }
 
     [McpServerTool, Description("Append raw text to a file at a vault-relative path (creates it if missing).")]
@@ -1457,7 +1580,7 @@ public static class RawFsTools
         [Description("Text to append")] string content)
     {
         auth.Require(Role.FullWrite);
-        return mdex.Call("append-file", path, "--content", content);
+        return mdex.Call("append-file", $"--content={content}", "--", path);
     }
 
     [McpServerTool, Description("Move or rename a file/directory within the vault (no overwrite).")]
@@ -1466,7 +1589,7 @@ public static class RawFsTools
         [Description("Destination vault-relative path")] string to)
     {
         auth.Require(Role.FullWrite);
-        return mdex.Call("move", from, to);
+        return mdex.Call("move", "--", from, to);
     }
 
     [McpServerTool, Description("Create a directory at a vault-relative path.")]
@@ -1474,7 +1597,7 @@ public static class RawFsTools
         [Description("Vault-relative path")] string path)
     {
         auth.Require(Role.FullWrite);
-        return mdex.Call("mkdir", path);
+        return mdex.Call("mkdir", "--", path);
     }
 
     [McpServerTool, Description("Delete a file or directory (recursive); revertible via git history.")]
@@ -1482,7 +1605,7 @@ public static class RawFsTools
         [Description("Vault-relative path")] string path)
     {
         auth.Require(Role.FullWrite);
-        return mdex.Call("delete", path);
+        return mdex.Call("delete", "--", path);
     }
 }
 ```
@@ -1784,5 +1907,5 @@ git commit -m "Add deployment unit and document mdex-mcp + mdex-mcpctl"
 
 - **Spec coverage:** A=Tasks 1,8,9; B=Task 10; C=Tasks 13–15; D(roles)=Task 3; D(store)=Tasks 5–7; D(auth)=Tasks 11–12,16; D(hot-reload)=Task 6; E=Task 8; F=Task 16; G=Task 18; H=Tasks 10,11,17 + per-verb behaviour in existing `Mdex.Cli.Tests`.
 - **Two known soft spots, both flagged inline with a fallback instruction rather than a guess:** the `EnableLegacySse` property name (Task 16) and the `MapMcp` endpoint path (Task 17). Both are one-line adjustments if the installed SDK differs.
-- **Content edge case:** `--content` values beginning with `--` are unsupported (header note); add a `--` end-of-flags separator to `ArgReader` as a follow-up if it ever bites.
+- **Robust arg passing:** Task 1B hardens `ArgReader` (`--key=value` + `--` end-of-options); Tasks 13–15 build args by the uniform rule (value-flags `--key=value`, booleans bare, then `--`, then positionals), so any content or positional — including values beginning with `--` — round-trips intact. The low-level `MdexBackend` tests (Task 10) pass plain positionals (no leading `--`), which need no separator.
 ```
