@@ -5,6 +5,8 @@ namespace Mdex.Cli.Commands.Read;
 public sealed class SearchTagsCommand : ICommand
 {
     public string Name => "search-tags";
+    public string Usage => "search-tags <pattern>";
+    public string Summary => "Tags containing the given substring.";
 
     public CommandResult Run(string[] args, CliContext ctx)
     {

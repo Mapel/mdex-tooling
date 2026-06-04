@@ -7,6 +7,8 @@ namespace Mdex.Cli.Commands.Write;
 public sealed class CreateCommand : ICommand
 {
     public string Name => "create";
+    public string Usage => "create <type> <name> [--no-body] [--body <tpl>]";
+    public string Summary => "Create a note (type: zettel|project|area|reference).";
 
     static readonly Dictionary<string, string> BaseDirs = new()
     {

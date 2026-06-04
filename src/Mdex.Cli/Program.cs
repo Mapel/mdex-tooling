@@ -7,7 +7,38 @@ var registry = CommandFactory.BuildRegistry();
 if (args.Length == 0 || args[0] is "--help" or "-h" or "help")
 {
     Console.WriteLine("mdext <command> [args] [--root <path>] [--json]");
-    Console.WriteLine("Commands: " + string.Join(", ", registry.Names));
+    Console.WriteLine();
+    Console.WriteLine("Global flags:");
+    Console.WriteLine("  --root <path>   vault root (else $MDEX_ROOT, else config)");
+    Console.WriteLine("  --json          emit the stable JSON envelope instead of human text");
+    Console.WriteLine();
+
+    static string GroupOf(ICommand c) => c.GetType().Namespace switch
+    {
+        "Mdex.Cli.Commands.Read" => "Read",
+        "Mdex.Cli.Commands.Write" => "Write",
+        "Mdex.Cli.Commands.Fs" => "Raw FS (guarded to vault root)",
+        _ => "Meta",
+    };
+
+    // Align summaries in a column, but cap the width so one long usage line
+    // doesn't push every description off to the right; longer ones wrap instead.
+    var width = Math.Min(registry.All.Max(c => c.Usage.Length), 44);
+    foreach (var group in registry.All.GroupBy(GroupOf))
+    {
+        Console.WriteLine(group.Key + ":");
+        foreach (var c in group)
+        {
+            if (c.Usage.Length <= width)
+                Console.WriteLine($"  {c.Usage.PadRight(width)}  {c.Summary}");
+            else
+            {
+                Console.WriteLine($"  {c.Usage}");
+                Console.WriteLine($"  {new string(' ', width)}  {c.Summary}");
+            }
+        }
+        Console.WriteLine();
+    }
     return 0;
 }
 
@@ -64,6 +95,6 @@ try
 }
 catch (CommandException ex)
 {
-    Console.Error.WriteLine(json ? JsonEnvelope.Err(verb, ex.Message) : $"Error: {ex.Message}");
+    Console.Error.WriteLine(json ? JsonEnvelope.Err(verb, ex.Message, ex.Details) : $"Error: {ex.Message}");
     return 1;
 }

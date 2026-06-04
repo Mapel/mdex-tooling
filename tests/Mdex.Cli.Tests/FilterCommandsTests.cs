@@ -42,4 +42,31 @@ public class FilterCommandsTests
         var r = new GetByDateRangeCommand().Run(new[] { "--from", "2026-05-01", "--to", "2026-05-31" }, Ctx(v));
         Assert.Equal(1, Count(r));
     }
+
+    [Fact]
+    public void GetByDateRange_open_ended_with_only_from()
+    {
+        using var v = new TestVault();
+        v.WriteNote("zettel/a.md", "---\ntype: zettel\ncreated: 2026-05-01T09:00:00\n---\n# A\n");
+        v.WriteNote("zettel/b.md", "---\ntype: zettel\ncreated: 2026-06-10T09:00:00\n---\n# B\n");
+        var r = new GetByDateRangeCommand().Run(new[] { "--from", "2026-06-01" }, Ctx(v));
+        Assert.Equal(1, Count(r)); // only b, no upper bound
+    }
+
+    [Fact]
+    public void GetByDateRange_open_ended_with_only_to()
+    {
+        using var v = new TestVault();
+        v.WriteNote("zettel/a.md", "---\ntype: zettel\ncreated: 2026-05-01T09:00:00\n---\n# A\n");
+        v.WriteNote("zettel/b.md", "---\ntype: zettel\ncreated: 2026-06-10T09:00:00\n---\n# B\n");
+        var r = new GetByDateRangeCommand().Run(new[] { "--to", "2026-05-31" }, Ctx(v));
+        Assert.Equal(1, Count(r)); // only a, no lower bound
+    }
+
+    [Fact]
+    public void GetByDateRange_requires_at_least_one_bound()
+    {
+        using var v = new TestVault();
+        Assert.Throws<CommandException>(() => new GetByDateRangeCommand().Run(Array.Empty<string>(), Ctx(v)));
+    }
 }

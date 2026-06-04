@@ -20,16 +20,21 @@ public sealed class NoteRepository(string vaultRoot, PathGuard guard)
         return notes;
     }
 
-    public Note? FindBySlugOrPath(string slugOrPath)
+    /// <summary>
+    /// Resolves a slug-or-path argument. A direct path hit is unambiguous (one note);
+    /// a bare slug may match several notes in different folders — all are returned so the
+    /// caller can detect the ambiguity instead of silently picking the first.
+    /// </summary>
+    public IReadOnlyList<Note> FindBySlugOrPath(string slugOrPath)
     {
-        // direct path hit first
+        // direct path hit first — unambiguous
         var asPath = Path.Combine(vaultRoot, slugOrPath.Replace('/', Path.DirectorySeparatorChar));
         if (!asPath.EndsWith(".md")) asPath += ".md";
         if (File.Exists(asPath))
-            return Build(asPath, guard.ToRelative(asPath));
+            return new[] { Build(asPath, guard.ToRelative(asPath)) };
 
-        return LoadAll().FirstOrDefault(n =>
-            string.Equals(n.Slug, slugOrPath, StringComparison.OrdinalIgnoreCase));
+        return LoadAll().Where(n =>
+            string.Equals(n.Slug, slugOrPath, StringComparison.OrdinalIgnoreCase)).ToList();
     }
 
     static readonly Regex H1 = new(@"^#\s+(.+)$", RegexOptions.Multiline);

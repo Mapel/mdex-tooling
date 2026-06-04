@@ -5,6 +5,8 @@ namespace Mdex.Cli.Commands.Read;
 public sealed class GetByTagCommand : ICommand
 {
     public string Name => "get-by-tag";
+    public string Usage => "get-by-tag <tag>...";
+    public string Summary => "Notes carrying all of the given tags.";
 
     public CommandResult Run(string[] args, CliContext ctx)
     {

@@ -22,4 +22,18 @@ public class AppendToNoteTests
         Assert.Contains("new line", text);
         Assert.DoesNotContain("modified: 2026-01-01", text);
     }
+
+    [Fact]
+    public void Ambiguous_slug_throws_and_writes_nothing()
+    {
+        using var v = new TestVault();
+        v.WriteNote("projects/a/index.md", "---\ntype: project\n---\n\n# A\n");
+        v.WriteNote("projects/b/index.md", "---\ntype: project\n---\n\n# B\n");
+        var ex = Assert.Throws<CommandException>(() =>
+            new AppendToNoteCommand().Run(new[] { "index", "--content", "APPENDED" }, Ctx(v)));
+        Assert.Contains("projects/a/index.md", ex.Message);
+        Assert.Contains("projects/b/index.md", ex.Message);
+        Assert.DoesNotContain("APPENDED", v.Read("projects/a/index.md"));
+        Assert.DoesNotContain("APPENDED", v.Read("projects/b/index.md"));
+    }
 }

@@ -7,6 +7,8 @@ namespace Mdex.Cli.Commands.Write;
 public sealed class PromoteInboxItemCommand : ICommand
 {
     public string Name => "promote-inbox-item";
+    public string Usage => "promote-inbox-item <inbox> <type> [--name <name>]";
+    public string Summary => "Move an inbox item into a typed folder.";
 
     static readonly Dictionary<string, string> BaseDirs = new()
     {
@@ -22,7 +24,7 @@ public sealed class PromoteInboxItemCommand : ICommand
         if (!BaseDirs.TryGetValue(targetType, out var baseDir))
             throw new CommandException($"unknown target type '{targetType}'");
 
-        var source = ctx.Repo.FindBySlugOrPath(sourceKey) ?? throw new CommandException($"inbox item not found: {sourceKey}");
+        var source = Resolver.Single(ctx, sourceKey, $"inbox item not found: {sourceKey}");
         if (source.Frontmatter.Type != "inbox")
             throw new CommandException($"not an inbox item: {sourceKey}");
 

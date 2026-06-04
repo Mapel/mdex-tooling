@@ -3,7 +3,12 @@ using Mdex.Cli.Vault;
 namespace Mdex.Cli.Cli;
 
 /// <summary>Expected, user-facing failure. Becomes a clean error (exit 1 / json error), not a stack trace.</summary>
-public sealed class CommandException(string message) : Exception(message);
+/// <remarks><paramref name="details"/> rides along in the JSON envelope's <c>details</c> field so
+/// machine consumers get structured context (e.g. ambiguous-slug candidates) without parsing the message.</remarks>
+public sealed class CommandException(string message, object? details = null) : Exception(message)
+{
+    public object? Details { get; } = details;
+}
 
 public sealed record CommandResult(object? Data, string HumanText)
 {
@@ -23,5 +28,7 @@ public interface ICommand
 {
     string Name { get; }
     bool NeedsVault => true;          // version/help override to false
+    string Usage => Name;             // argument signature shown in --help
+    string Summary => "";             // one-line description shown in --help
     CommandResult Run(string[] args, CliContext ctx);
 }

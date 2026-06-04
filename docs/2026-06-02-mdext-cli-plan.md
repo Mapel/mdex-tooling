@@ -16,6 +16,43 @@
 
 ---
 
+## Post-implementation addendum (2026-06-04)
+
+The CLI shipped per this plan; the following refinements were made afterwards and
+**supersede the task descriptions below** where they differ. Source of truth is the
+code + `mdext --help` + README.
+
+- **Slug ambiguity is now detected.** `NoteRepository.FindBySlugOrPath` returns *all*
+  notes sharing a bare slug instead of silently taking the first. A shared central
+  helper (`Commands/Resolver.cs`) resolves a slug-or-path to exactly one note: read
+  commands (`read-note`, `find-related`) error and list the candidate paths; write
+  commands (`append-to-note`, `append-to-log`, `promote-inbox-item`) refuse to act.
+  An explicit vault-relative path always disambiguates. (Tasks 10, 13, 17–19.)
+
+- **`find-related` depth flags.** `--hops` was **renamed to `--maxhops`** and a
+  `--recursive` flag added (walk the whole connected component). Given both,
+  `--maxhops` wins as the ceiling. The BFS now prunes the frontier to newly-discovered
+  notes, so every note is expanded once and cycles terminate. Accepts a slug or a path.
+  (Task 13.)
+
+- **`get-by-date-range` bounds are individually optional.** `--from` *or* `--to`
+  suffices; the missing side is open-ended. At least one is required. Notes without the
+  selected date field remain excluded. (Task 11.)
+
+- **`--json` error envelope extended (contract change).** Success is unchanged
+  (`{ ok, command, data }`); failure is now `{ ok, command, error, details? }`. The
+  optional `details` carries structured context — an ambiguous slug returns
+  `details.candidates: [paths]` so consumers needn't parse the message. Output also
+  switched to relaxed UTF-8 (`JavaScriptEncoder.UnsafeRelaxedJsonEscaping`): real
+  characters instead of `\uXXXX`, decoded value identical. (Task 7.)
+
+- **`--help` and README are generated/complete.** Each `ICommand` carries `Usage` +
+  `Summary`; `--help` renders them grouped (Meta/Read/Write/Raw FS), and the README
+  documents every command with its flags. A test (`HelpMetadataTests`) enforces that
+  every command keeps its docs. (Task 22.)
+
+---
+
 ## Prerequisites & Goal condition (autonomous `/goal` run)
 
 This plan is written to be executed autonomously via `/goal`. Before arming the

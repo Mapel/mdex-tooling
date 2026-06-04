@@ -5,6 +5,8 @@ namespace Mdex.Cli.Commands.Read;
 public sealed class ListCommand : ICommand
 {
     public string Name => "list";
+    public string Usage => "list [path]";
+    public string Summary => "Recursive file/dir tree under an optional vault-relative subpath.";
 
     public CommandResult Run(string[] args, CliContext ctx)
     {

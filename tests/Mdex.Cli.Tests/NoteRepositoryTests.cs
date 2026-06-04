@@ -21,9 +21,8 @@ public class NoteRepositoryTests
     {
         using var v = new TestVault();
         v.WriteNote("zettel/no-heading.md", "---\ntype: zettel\n---\n\nJust text\n");
-        var note = Repo(v).FindBySlugOrPath("no-heading");
-        Assert.NotNull(note);
-        Assert.Equal("no-heading", note!.Title);
+        var note = Assert.Single(Repo(v).FindBySlugOrPath("no-heading"));
+        Assert.Equal("no-heading", note.Title);
     }
 
     [Fact]
@@ -31,8 +30,28 @@ public class NoteRepositoryTests
     {
         using var v = new TestVault();
         v.WriteNote("projects/x/index.md", "---\ntype: project\n---\n\n# X\n");
-        var note = Repo(v).FindBySlugOrPath("projects/x/index.md");
-        Assert.NotNull(note);
-        Assert.Equal("index", note!.Slug);
+        var note = Assert.Single(Repo(v).FindBySlugOrPath("projects/x/index.md"));
+        Assert.Equal("index", note.Slug);
+    }
+
+    [Fact]
+    public void FindBySlugOrPath_returns_all_notes_sharing_a_slug()
+    {
+        using var v = new TestVault();
+        v.WriteNote("projects/a/index.md", "---\ntype: project\n---\n\n# A\n");
+        v.WriteNote("projects/b/index.md", "---\ntype: project\n---\n\n# B\n");
+        var matches = Repo(v).FindBySlugOrPath("index");
+        Assert.Equal(2, matches.Count);
+        Assert.All(matches, n => Assert.Equal("index", n.Slug));
+    }
+
+    [Fact]
+    public void FindBySlugOrPath_path_hit_is_unambiguous_despite_shared_slug()
+    {
+        using var v = new TestVault();
+        v.WriteNote("projects/a/index.md", "---\ntype: project\n---\n\n# A\n");
+        v.WriteNote("projects/b/index.md", "---\ntype: project\n---\n\n# B\n");
+        var note = Assert.Single(Repo(v).FindBySlugOrPath("projects/b/index.md"));
+        Assert.Equal("projects/b/index.md", note.RelativePath);
     }
 }

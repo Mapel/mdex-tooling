@@ -5,12 +5,14 @@ namespace Mdex.Cli.Commands.Read;
 public sealed class ReadNoteCommand : ICommand
 {
     public string Name => "read-note";
+    public string Usage => "read-note <slug|path>";
+    public string Summary => "Print a note's frontmatter and body.";
 
     public CommandResult Run(string[] args, CliContext ctx)
     {
         var reader = new ArgReader(args);
         var key = reader.Positional(0) ?? throw new CommandException("read-note needs a slug or path");
-        var note = ctx.Repo.FindBySlugOrPath(key) ?? throw new CommandException($"note not found: {key}");
+        var note = Resolver.Single(ctx, key, $"note not found: {key}");
 
         var data = new
         {

@@ -5,6 +5,7 @@ namespace Mdex.Cli.Commands.Read;
 public sealed class ListTagsCommand : ICommand
 {
     public string Name => "list-tags";
+    public string Summary => "All tags with their counts.";
 
     public CommandResult Run(string[] args, CliContext ctx)
     {

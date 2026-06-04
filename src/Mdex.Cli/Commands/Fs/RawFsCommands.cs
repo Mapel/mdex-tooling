@@ -6,6 +6,8 @@ namespace Mdex.Cli.Commands.Fs;
 public sealed class WriteFileCommand : ICommand
 {
     public string Name => "write-file";
+    public string Usage => "write-file <path> (--content <text> | stdin)";
+    public string Summary => "Create or overwrite a file.";
     public CommandResult Run(string[] args, CliContext ctx)
     {
         var reader = new ArgReader(args);
@@ -20,6 +22,8 @@ public sealed class WriteFileCommand : ICommand
 public sealed class AppendFileCommand : ICommand
 {
     public string Name => "append-file";
+    public string Usage => "append-file <path> (--content <text> | stdin)";
+    public string Summary => "Append to a file.";
     public CommandResult Run(string[] args, CliContext ctx)
     {
         var reader = new ArgReader(args);
@@ -34,6 +38,8 @@ public sealed class AppendFileCommand : ICommand
 public sealed class MoveCommand : ICommand
 {
     public string Name => "move";
+    public string Usage => "move <from> <to>";
+    public string Summary => "Move a file or directory (no overwrite).";
     public CommandResult Run(string[] args, CliContext ctx)
     {
         var reader = new ArgReader(args);
@@ -53,6 +59,8 @@ public sealed class MoveCommand : ICommand
 public sealed class MkdirCommand : ICommand
 {
     public string Name => "mkdir";
+    public string Usage => "mkdir <path>";
+    public string Summary => "Create a directory.";
     public CommandResult Run(string[] args, CliContext ctx)
     {
         var reader = new ArgReader(args);
@@ -66,6 +74,8 @@ public sealed class MkdirCommand : ICommand
 public sealed class DeleteCommand : ICommand
 {
     public string Name => "delete";
+    public string Usage => "delete <path>";
+    public string Summary => "Delete a file or directory (recursive).";
     public CommandResult Run(string[] args, CliContext ctx)
     {
         var reader = new ArgReader(args);

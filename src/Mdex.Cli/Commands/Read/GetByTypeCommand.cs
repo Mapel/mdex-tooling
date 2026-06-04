@@ -5,6 +5,8 @@ namespace Mdex.Cli.Commands.Read;
 public sealed class GetByTypeCommand : ICommand
 {
     public string Name => "get-by-type";
+    public string Usage => "get-by-type <type>";
+    public string Summary => "Notes whose frontmatter type matches.";
 
     public CommandResult Run(string[] args, CliContext ctx)
     {

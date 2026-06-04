@@ -5,6 +5,8 @@ namespace Mdex.Cli.Commands.Read;
 public sealed class SearchCommand : ICommand
 {
     public string Name => "search";
+    public string Usage => "search <query>";
+    public string Summary => "Full-text substring search over title + body (one hit per note).";
 
     public CommandResult Run(string[] args, CliContext ctx)
     {

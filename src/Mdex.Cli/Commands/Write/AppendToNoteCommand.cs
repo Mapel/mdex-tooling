@@ -7,6 +7,8 @@ namespace Mdex.Cli.Commands.Write;
 public sealed class AppendToNoteCommand : ICommand
 {
     public string Name => "append-to-note";
+    public string Usage => "append-to-note <slug|path> (--content <text> | stdin)";
+    public string Summary => "Append a section and bump the modified date.";
 
     public CommandResult Run(string[] args, CliContext ctx)
     {
@@ -15,7 +17,7 @@ public sealed class AppendToNoteCommand : ICommand
         var content = reader.Content();
         if (string.IsNullOrWhiteSpace(content)) throw new CommandException("append-to-note needs --content or stdin");
 
-        var note = ctx.Repo.FindBySlugOrPath(key) ?? throw new CommandException($"note not found: {key}");
+        var note = Resolver.Single(ctx, key, $"note not found: {key}");
         var text = File.ReadAllText(note.Path).Replace("\r\n", "\n").TrimEnd('\n');
         text += "\n\n" + content.TrimEnd() + "\n";
         text = FrontmatterEditor.SetField(text, "modified", DateTime.Now.ToString("yyyy-MM-dd"));

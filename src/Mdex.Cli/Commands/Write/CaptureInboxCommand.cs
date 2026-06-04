@@ -6,6 +6,8 @@ namespace Mdex.Cli.Commands.Write;
 public sealed class CaptureInboxCommand : ICommand
 {
     public string Name => "capture-inbox";
+    public string Usage => "capture-inbox (--content <text> | stdin)";
+    public string Summary => "Append a new timestamped inbox entry.";
 
     public CommandResult Run(string[] args, CliContext ctx)
     {

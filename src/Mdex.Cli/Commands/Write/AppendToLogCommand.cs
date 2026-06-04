@@ -7,6 +7,8 @@ namespace Mdex.Cli.Commands.Write;
 public sealed class AppendToLogCommand : ICommand
 {
     public string Name => "append-to-log";
+    public string Usage => "append-to-log <slug|path> (--content <text> | stdin)";
+    public string Summary => "Add a dated bullet under the note's ## Log section.";
 
     public CommandResult Run(string[] args, CliContext ctx)
     {
@@ -15,7 +17,7 @@ public sealed class AppendToLogCommand : ICommand
         var content = reader.Content();
         if (string.IsNullOrWhiteSpace(content)) throw new CommandException("append-to-log needs --content or stdin");
 
-        var note = ctx.Repo.FindBySlugOrPath(key) ?? throw new CommandException($"note not found: {key}");
+        var note = Resolver.Single(ctx, key, $"note not found: {key}");
         var today = DateTime.Now.ToString("yyyy-MM-dd");
         var entry = "- " + content.Trim();
 
