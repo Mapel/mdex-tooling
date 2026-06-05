@@ -795,7 +795,7 @@ public class ToolGateGuardTests
 }
 ```
 
-> **On the count `19`:** the design's §6 line "Tool-Oberfläche (14 Tools)" predates the 5 raw-fs tools (it was 9 read + 5 intent). The live surface is **9 + 5 + 5 = 19**, one per runnable command in `CommandFactory.BuildRegistry()` (minus the `version` meta verb). The `Tool_count_matches_engine_commands_minus_meta` test is the durable invariant; the literal `19` is a tripwire if someone adds a tool without a command (or vice versa).
+> **On the count `19`:** the live surface is **9 + 5 + 5 = 19** (design §6), one per runnable command in `CommandFactory.BuildRegistry()` (minus the `version` meta verb). The `Tool_count_matches_engine_commands_minus_meta` test is the durable invariant; the literal `19` is a tripwire if someone adds a tool without a command (or vice versa).
 
 - [ ] **Step 2: Run → expect PASS**
 

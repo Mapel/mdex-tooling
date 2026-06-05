@@ -247,9 +247,9 @@ und `mdex-token` statt „mdex-mcpctl" zu lesen):
 - **Token-Admin** (Plan-2 §E): `mdex-token new/list/revoke`, Roh-Token einmalig.
 - **Deployment-Koexistenz mit Auto-Commit** (Plan-2 §G, Gesamt-§3/§10): Server
   schreibt nur Dateien, `mdex-autocommit.sh` bleibt einziger Git-Akteur.
-- **Tool-Oberfläche (14 Tools)** (Plan-2 §C): Read 9 / Intent 5 / Raw-FS 5,
-  `create_note` als ein Tool. Diese Tools leben jetzt in `Mdex.Mcp.Tools` und werden
-  von **beiden** Hosts geteilt.
+- **Tool-Oberfläche (19 Tools)** (Plan-2 §C): Read 9 / Intent 5 / Raw-FS 5
+  (= 9+5+5; `create_note` als ein Tool). Diese Tools leben jetzt in `Mdex.Mcp.Tools`
+  und werden von **beiden** Hosts geteilt.
 
 ---
 
