@@ -1,4 +1,5 @@
 using System.Text.RegularExpressions;
+using Mdex.Cli.Cli;
 
 namespace Mdex.Cli.Vault;
 
@@ -27,14 +28,23 @@ public sealed class NoteRepository(string vaultRoot, PathGuard guard)
     /// </summary>
     public IReadOnlyList<Note> FindBySlugOrPath(string slugOrPath)
     {
-        // direct path hit first — unambiguous
-        var asPath = Path.Combine(vaultRoot, slugOrPath.Replace('/', Path.DirectorySeparatorChar));
-        if (!asPath.EndsWith(".md")) asPath += ".md";
-        if (File.Exists(asPath))
+        // direct path hit first — unambiguous, but must stay inside the vault
+        if (TryResolveInside(slugOrPath, out var asPath) && File.Exists(asPath))
             return new[] { Build(asPath, guard.ToRelative(asPath)) };
 
         return LoadAll().Where(n =>
             string.Equals(n.Slug, slugOrPath, StringComparison.OrdinalIgnoreCase)).ToList();
+    }
+
+    /// <summary>True only if <paramref name="slugOrPath"/> names a `.md` file inside the vault.
+    /// An escaping or empty candidate yields no direct hit (caller falls back to slug search).</summary>
+    bool TryResolveInside(string slugOrPath, out string abs)
+    {
+        abs = "";
+        var rel = slugOrPath.Replace('/', Path.DirectorySeparatorChar);
+        if (!rel.EndsWith(".md")) rel += ".md";
+        try { abs = guard.ResolveInside(rel); return true; }
+        catch (CommandException) { return false; }   // outside the vault → not a direct hit
     }
 
     static readonly Regex H1 = new(@"^#\s+(.+)$", RegexOptions.Multiline);
