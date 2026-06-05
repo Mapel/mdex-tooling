@@ -14,7 +14,7 @@ public class PathGuardTests : IDisposable
     {
         var guard = new PathGuard(_root);
         var abs = guard.ResolveInside("inbox/a.md");
-        Assert.StartsWith(_root, abs);
+        Assert.StartsWith(_root + Path.DirectorySeparatorChar, abs); // strictly under root, not the root itself
         Assert.EndsWith("a.md", abs);
     }
 
@@ -59,6 +59,15 @@ public class PathGuardTests : IDisposable
         var flipped = Path.Combine(parent, Path.GetFileName(_root).ToUpperInvariant(), "x.md");
         var guard = new PathGuard(_root);
         Assert.Throws<CommandException>(() => guard.ResolveInside(flipped));
+    }
+
+    [Fact]
+    public void Prefix_sibling_directory_is_rejected()
+    {
+        // A sibling whose name has the root as a prefix (root + "-evil") must NOT be admitted;
+        // this locks the trailing-separator invariant in the containment check.
+        var guard = new PathGuard(_root);
+        Assert.Throws<CommandException>(() => guard.ResolveInside(Path.Combine(_root + "-evil", "x.md")));
     }
 
     [Fact]
