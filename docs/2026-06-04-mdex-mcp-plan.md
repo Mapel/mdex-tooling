@@ -1,5 +1,11 @@
 # mdex-mcp & mdex-mcpctl Implementation Plan
 
+> ⚠️ **SUPERSEDED (2026-06-05).** The design changed — see
+> [2026-06-05-mdex-mcp-local-remote-design.md](2026-06-05-mdex-mcp-local-remote-design.md)
+> (local + remote, 4-binary family with renames, B2 without a bridge). This plan is
+> built around the single remote server and is **no longer current**; a new
+> implementation plan will replace it. Do **not** execute this plan as-is.
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** Build the remote MCP server `mdex-mcp` (ASP.NET Core) and the token-admin CLI `mdex-mcpctl`, both on top of the existing `mdext` CLI, so AI clients get a guarded, role-gated, mdex-aware HTTP tool surface over the vault.

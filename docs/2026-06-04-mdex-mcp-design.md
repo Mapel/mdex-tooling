@@ -1,7 +1,13 @@
 # Design: mdex-mcp & mdex-mcpctl – Remote-MCP-Server + Token-Admin (Plan 2)
 
+> ⚠️ **ABGELÖST (2026-06-05)** durch
+> [2026-06-05-mdex-mcp-local-remote-design.md](2026-06-05-mdex-mcp-local-remote-design.md):
+> lokal + remote, 4-Binary-Familie (umbenannt — dieses `mdex-mcp` heißt jetzt
+> `mdex-gateway`), B2 ohne Bridge, `Data`-Objekt statt Envelope-Parse. Inhalte hier
+> gelten nur, soweit das Update sie ausdrücklich als „unverändert übernommen" führt.
+>
 > **Datum:** 2026-06-04
-> **Status:** Entwurf (zum Review)
+> **Status:** Abgelöst (historisch)
 > **Kontext:** Brainstorming-Session, baut auf
 > [2026-06-01-mdex-tooling-design.md](2026-06-01-mdex-tooling-design.md) (Gesamtdesign)
 > und [2026-06-02-mdext-cli-plan.md](2026-06-02-mdext-cli-plan.md) (Plan 1, CLI – fertig)
