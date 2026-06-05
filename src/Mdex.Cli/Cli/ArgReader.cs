@@ -1,6 +1,6 @@
 namespace Mdex.Cli.Cli;
 
-/// <summary>Tiny positional + `--flag value` + `--flag` (bool) + stdin reader.</summary>
+/// <summary>Tiny positional + `--flag=value` + `--flag value` + `--flag` (bool) + `--` end-of-options + stdin reader.</summary>
 public sealed class ArgReader
 {
     readonly List<string> _positionals = new();
@@ -18,10 +18,11 @@ public sealed class ArgReader
             if (!positionalsOnly && arg.StartsWith("--"))
             {
                 var eq = arg.IndexOf('=');
-                if (eq >= 0) _flags[arg[..eq]] = arg[(eq + 1)..];                         // --key=value
-                else if (i + 1 < args.Length && !args[i + 1].StartsWith("--"))
+                if (eq > 2) _flags[arg[..eq]] = arg[(eq + 1)..];                          // --key=value (key non-empty)
+                else if (eq < 0 && i + 1 < args.Length && !args[i + 1].StartsWith("--"))
                     _flags[arg] = args[++i];                                              // --key value
-                else _flags[arg] = null;                                                 // boolean --key
+                else if (eq < 0) _flags[arg] = null;                                      // boolean --key
+                else _positionals.Add(arg);                                               // malformed "--=…" → positional
             }
             else _positionals.Add(arg);
         }

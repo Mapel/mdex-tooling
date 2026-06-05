@@ -1,4 +1,5 @@
 using Mdex.Cli.Cli;
+
 namespace Mdex.Cli.Tests;
 
 public class ArgReaderTests
@@ -48,5 +49,21 @@ public class ArgReaderTests
         Assert.Equal("text", r.Flag("--content"));
         Assert.True(r.Has("--recursive"));
         Assert.Null(r.Flag("--recursive"));
+    }
+
+    [Fact]
+    public void Malformed_double_dash_equals_is_positional_not_a_flag()
+    {
+        var r = new ArgReader(new[] { "--=oops" });
+        Assert.Equal("--=oops", r.Positional(0));
+        Assert.False(r.Has("--"));
+    }
+
+    [Fact]
+    public void Lone_flag_at_end_of_args_is_boolean()
+    {
+        var r = new ArgReader(new[] { "--verbose" });
+        Assert.True(r.Has("--verbose"));
+        Assert.Null(r.Flag("--verbose"));
     }
 }
