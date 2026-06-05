@@ -41,6 +41,8 @@ Eng geschnitten: nur die Eigenschaften, auf die sich `mdex-mcp` tatsächlich st�
 
 **Zu ArgReader/Task 1B:** Die Free-Text-Ambiguität (`--content` beginnt mit `--`) ist ein Korrektheitsthema, von Task 1B abgedeckt, **kein** Injection-Vektor. Wichtig: Task 1B fixt HIGH-1 **nicht** — das Traversal sitzt im Resolver/`NoteRepository`, nicht im Arg-Parser. Zwei getrennte Baustellen.
 
+> **Status (2026-06-05): Phase-1-Fixes gelandet** auf Branch `mdext-security-fixes` via [2026-06-05-mdext-security-fixes-plan.md](2026-06-05-mdext-security-fixes-plan.md). Alle drei PoCs (Read-/Write-Traversal, `delete ""`-Root-Wipe) erneut geprüft → dicht; 87 Tests grün. HIGH-1, MED-2, MED-3, LOW-MED-4 + ArgReader-Härtung umgesetzt.
+
 ---
 
 ## Phase 2 — Security-Design-Check von mdex-mcp  *(abgeschlossen 2026-06-05)*
