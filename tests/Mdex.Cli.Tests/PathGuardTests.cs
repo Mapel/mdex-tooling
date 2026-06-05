@@ -84,4 +84,30 @@ public class PathGuardTests : IDisposable
         var guard = new PathGuard(_root);
         Assert.Equal("zettel/x.md", guard.ToRelative(Path.Combine(_root, "zettel", "x.md")));
     }
+
+    [Fact]
+    public void Symlink_escaping_the_vault_is_rejected()
+    {
+        var outside = Path.Combine(Path.GetTempPath(), "mdex-outside-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(outside);
+        File.WriteAllText(Path.Combine(outside, "x.md"), "secret");
+        try
+        {
+            Directory.CreateSymbolicLink(Path.Combine(_root, "link"), outside); // vault/link -> outside
+            var guard = new PathGuard(_root);
+            Assert.Throws<CommandException>(() => guard.ResolveInside("link/x.md"));
+        }
+        finally { try { Directory.Delete(outside, true); } catch { } }
+    }
+
+    [Fact]
+    public void Symlink_staying_inside_the_vault_is_allowed()
+    {
+        Directory.CreateDirectory(Path.Combine(_root, "real"));
+        File.WriteAllText(Path.Combine(_root, "real", "x.md"), "ok");
+        Directory.CreateSymbolicLink(Path.Combine(_root, "alias"), Path.Combine(_root, "real")); // inside -> inside
+        var guard = new PathGuard(_root);
+        var abs = guard.ResolveInside("alias/x.md");
+        Assert.EndsWith(Path.Combine("alias", "x.md"), abs); // lexical path returned; resolves inside
+    }
 }

@@ -39,6 +39,27 @@ public sealed class PathGuard
     public string ToRelative(string absolute)
         => Path.GetRelativePath(_root, absolute).Replace(Path.DirectorySeparatorChar, '/');
 
-    // Replaced with real symlink resolution in Task 3.
-    static string Canonicalize(string path) => path;
+    /// <summary>
+    /// Resolve symlinks over the existing prefix of <paramref name="fullPath"/>, segment by segment,
+    /// so a symlink component pointing outside the root is reflected in the returned path. Segments
+    /// that do not exist yet are appended literally (they cannot be symlinks).
+    /// </summary>
+    static string Canonicalize(string fullPath)
+    {
+        var root = Path.GetPathRoot(fullPath) ?? "";
+        var rest = fullPath[root.Length..];
+        var segments = rest.Split(Path.DirectorySeparatorChar, StringSplitOptions.RemoveEmptyEntries);
+
+        var current = root;
+        foreach (var seg in segments)
+        {
+            current = Path.Combine(current, seg);
+            FileSystemInfo? info = Directory.Exists(current) ? new DirectoryInfo(current)
+                                 : File.Exists(current) ? new FileInfo(current)
+                                 : null;
+            if (info?.ResolveLinkTarget(returnFinalTarget: true) is { } target)
+                current = target.FullName;   // jump to the link's final target, then keep descending
+        }
+        return current;
+    }
 }
