@@ -39,10 +39,10 @@ src/
     Mdex.Cli.csproj                references Mdex.Core; AssemblyName/ToolCommandName = mdex-cli
     Program.cs                     parse global flags + render; delegates to CommandEngine
 tests/
-  Mdex.Cli.Tests/                  retargeted to reference Mdex.Core (name unchanged)
+  Mdex.Core.Tests/                 renamed from Mdex.Cli.Tests; references Mdex.Core
 ```
 
-Namespaces move `Mdex.Cli.*` → `Mdex.Core.*` for the extracted code. `Program.cs` keeps living in the `Mdex.Cli` exe (top-level statements, no namespace) but now `using Mdex.Core.*`. The test project keeps its name `Mdex.Cli.Tests` (it is the safety net — we churn it as little as possible) and only swaps its project reference + `using`s.
+Namespaces move `Mdex.Cli.*` → `Mdex.Core.*` for the extracted code. `Program.cs` keeps living in the `Mdex.Cli` exe (top-level statements, no namespace) but now `using Mdex.Core.*`. The test project is **renamed** `Mdex.Cli.Tests` → `Mdex.Core.Tests` (folder, csproj, `namespace`) and retargeted at `Mdex.Core`. The `Mdex.Cli` exe folder keeps its name, so `EndToEndJsonTests`' `dotnet run` path stays valid.
 
 ---
 
@@ -100,7 +100,7 @@ This is a **mechanical move + namespace rename**. No logic changes. The task end
 - Move (git mv): `src/Mdex.Cli/Cli/`, `src/Mdex.Cli/Commands/`, `src/Mdex.Cli/Vault/` → `src/Mdex.Core/`
 - Modify: every moved `*.cs` (namespace `Mdex.Cli.*`→`Mdex.Core.*`)
 - Modify: `src/Mdex.Cli/Mdex.Cli.csproj`, `src/Mdex.Cli/Program.cs`
-- Modify: `tests/Mdex.Cli.Tests/Mdex.Cli.Tests.csproj` + every test `*.cs` (`using Mdex.Cli.*`→`using Mdex.Core.*`)
+- Rename: `tests/Mdex.Cli.Tests/` → `tests/Mdex.Core.Tests/` (folder + csproj + sln + `namespace`); retarget ProjectReference to `Mdex.Core`; `using Mdex.Cli.*`→`using Mdex.Core.*`
 
 - [ ] **Step 1: Move the three folders with git (preserves history)**
 
@@ -172,7 +172,17 @@ with
         "Mdex.Core.Commands.Fs" => "Raw FS (guarded to vault root)",
 ```
 
-- [ ] **Step 5: Retarget the test project reference.** In `tests/Mdex.Cli.Tests/Mdex.Cli.Tests.csproj` change
+- [ ] **Step 5: Rename the test project to `Mdex.Core.Tests` and point it at `Mdex.Core`.**
+
+```powershell
+$REPO = "C:\Users\MichaelDiesen\repos\mdex-tooling"
+git -C $REPO mv tests/Mdex.Cli.Tests tests/Mdex.Core.Tests
+git -C $REPO mv tests/Mdex.Core.Tests/Mdex.Cli.Tests.csproj tests/Mdex.Core.Tests/Mdex.Core.Tests.csproj
+dotnet sln "$REPO\Mdex.sln" remove "tests\Mdex.Cli.Tests\Mdex.Cli.Tests.csproj"
+dotnet sln "$REPO\Mdex.sln" add    "tests\Mdex.Core.Tests\Mdex.Core.Tests.csproj"
+```
+
+Then in `tests/Mdex.Core.Tests/Mdex.Core.Tests.csproj` change the project reference
 ```xml
     <ProjectReference Include="..\..\src\Mdex.Cli\Mdex.Cli.csproj" />
 ```
@@ -181,13 +191,17 @@ to
     <ProjectReference Include="..\..\src\Mdex.Core\Mdex.Core.csproj" />
 ```
 
-- [ ] **Step 6: Update the test `using`s.** The tests reference the moved types via `using Mdex.Cli.…`. Rewrite only the `using` lines (leave `namespace Mdex.Cli.Tests` as-is; the `EndToEndJsonTests` `dotnet run` path also stays — it still points at `src/Mdex.Cli`):
+> `dotnet sln remove/add` re-registers the project at the solution root; the VS "tests" solution-folder nesting is cosmetic and does not affect build/test.
+
+- [ ] **Step 6: Update the test `using`s and namespace.** Two **targeted** replaces over the renamed folder. **Do not** blind-replace every `Mdex.Cli`: `EndToEndJsonTests.CliDir()` holds the path literal `"Mdex.Cli"` for the exe folder, which must stay.
 
 ```powershell
 $REPO = "C:\Users\MichaelDiesen\repos\mdex-tooling"
-Get-ChildItem "$REPO\tests\Mdex.Cli.Tests" -Recurse -Filter *.cs | ForEach-Object {
+Get-ChildItem "$REPO\tests\Mdex.Core.Tests" -Recurse -Filter *.cs | ForEach-Object {
   $t = [IO.File]::ReadAllText($_.FullName)
-  [IO.File]::WriteAllText($_.FullName, ($t -replace 'using Mdex\.Cli\.', 'using Mdex.Core.'))
+  $t = $t -replace 'using Mdex\.Cli\.', 'using Mdex.Core.'
+  $t = $t -replace 'namespace Mdex\.Cli\.Tests', 'namespace Mdex.Core.Tests'
+  [IO.File]::WriteAllText($_.FullName, $t)
 }
 ```
 
@@ -212,14 +226,14 @@ The dispatch logic (resolve vault → build `CliContext` → look up verb → ru
 
 **Files:**
 - Create: `src/Mdex.Core/Cli/CommandEngine.cs`
-- Test: `tests/Mdex.Cli.Tests/CommandEngineTests.cs`
+- Test: `tests/Mdex.Core.Tests/CommandEngineTests.cs`
 - Modify: `src/Mdex.Cli/Program.cs`
 
-- [ ] **Step 1: Write the failing test** (`tests/Mdex.Cli.Tests/CommandEngineTests.cs`)
+- [ ] **Step 1: Write the failing test** (`tests/Mdex.Core.Tests/CommandEngineTests.cs`)
 
 ```csharp
 using Mdex.Core.Cli;
-namespace Mdex.Cli.Tests;
+namespace Mdex.Core.Tests;
 
 public class CommandEngineTests
 {
