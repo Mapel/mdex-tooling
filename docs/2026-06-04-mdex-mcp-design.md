@@ -51,6 +51,54 @@ YAGNI bzw. maximale Treue, das neue Argument trifft jeweils die echte Grenze.
 
 ---
 
+## Sicherheits-Annahmen & Threat-Model
+
+> Ergänzt nach dem Security-Design-Review (Phase 2,
+> [2026-06-05-mdex-security-review-plan.md](2026-06-05-mdex-security-review-plan.md)).
+
+**Voraussetzung (eigener Plan):** Dieser Server setzt voraus, dass die Phase-1-
+Containment-Fixes an `mdext` bereits gelandet sind
+([2026-06-05-mdext-security-fixes-plan.md](2026-06-05-mdext-security-fixes-plan.md)):
+jede Datei-Operation – **auch die Slug-/Pfad-Auflösung** – ist auf den Vault-Root
+gejailt; leere/Root-Ziele und Symlink-Ausbrüche sind abgewiesen. **Ohne diese
+Fixes ist die Rollen-Leiter wirkungslos** (`read` = „lies jede `.md` am Server",
+`write-intent` = „beschreibe jede existierende `.md`").
+
+**Exposition:** Der Server bindet ausschließlich auf `127.0.0.1` und steht hinter
+einem TLS-terminierenden Reverse-Proxy. Bearer-Token gehen nie im Klartext übers
+Netz; der Klartext-Hop existiert nur auf dem Loopback (Proxy → Kestrel).
+
+**Angreifer-Modell:**
+1. **Netzwerk-Client ohne/mit geratenem Token** → 256-Bit-Zufallstoken, nur Hash
+   gespeichert, kein Treffer → `401`.
+2. **Kompromittierter/bösartiger AI-Client mit gültigem Token**, der (a) seine
+   Rolle übersteigen oder (b) den Vault verlassen will → Rollen-Leiter (default-deny,
+   §D) bzw. das mdext-Jail (Voraussetzung oben) fangen das ab.
+3. **Lokaler Schreibzugriff auf `tokens.json`** = Vollkompromiss: wer die Datei
+   schreiben kann, injiziert sich einen `fullwrite`-Hash (der Watcher vertraut der
+   Datei blind). Daher Datei `0600`, Verzeichnis `0700`.
+
+**Bewusste Sicherheits-Eigenschaften (keine offenen Punkte):**
+- **In-Process = keine Shell = keine Command-Injection.** Der größte theoretische
+  Risikopfad bei „AI ruft CLI-Verben mit Freitext-Args" ist by-design eliminiert
+  (der eigentliche Wert von §5, hier ohne Subprozess erreicht).
+- **Vault-Root serverseitig gepinnt.** `MdexBackend` übergibt den konfigurierten
+  Root; Tool-Args gehen als Positionals hinter `--`. Der AI kann **kein** `--root`
+  injizieren.
+- **Nur Hashes gespeichert**, Roh-Token einmalig angezeigt. SHA-256 *unsalted* ist
+  korrekt: der Token hat 256 Bit Entropie → kein Brute-/Rainbow-Risiko, kein
+  bcrypt/argon nötig. Verifikation hasht den präsentierten Token und vergleicht
+  **Hashes** (nicht Roh-Token) → ein nicht-konstanter Vergleich leckt höchstens
+  einen preimage-resistenten Hash; **Constant-Time ist daher nicht zwingend**.
+- **Hot-Reload fällt sicher:** korrupte/halb-geschriebene Datei → leerer Store →
+  alle Anfragen `401` (fail-closed). mcpctl schreibt **atomar** (Temp + rename).
+
+**Akzeptierter Tradeoff:** Token haben **keine Ablaufzeit** (gültig bis `revoke`).
+Bewusst für langlebige AI-Client-Creds; Rotation/Expiry bleibt reversibler
+Nachrüst-Pfad.
+
+---
+
 ## A. Solution-Layout & Projekte
 
 ```
@@ -97,6 +145,10 @@ Ein dünner `MdexBackend` in `Mdex.Mcp` kapselt den Aufruf:
 - Bei `ok=false` wird ein Backend-Fehler geworfen, den der Tool-Layer in einen
   MCP-Tool-Error übersetzt – **inklusive `details`** (z.B. `details.candidates`
   bei mehrdeutigem Slug; der in Plan 1 erweiterte Kontrakt zahlt sich hier aus).
+- **Unerwartete Exceptions** (keine `CommandException`) werden bereits im
+  `CliDispatcher` abgefangen und auf eine generische Fehler-Envelope gemappt – nie
+  als .NET-Stacktrace/absoluter Pfad an den AI-Client (Details nur serverseitig
+  geloggt). Schließt das Info-Leak-Finding (Phase 2 D-4); siehe Plan-Task 1.
 - Inhalt (`data`) wird unverändert als Tool-Ergebnis durchgereicht.
 
 ## C. MCP-Tool-Oberfläche (14 Tools)
@@ -144,6 +196,9 @@ Datei **außerhalb des Vault-Repos**: `~/.config/mdex-mcp/tokens.json`. Liste vo
 - Gespeichert wird **nur** der SHA-256-Hash des Tokens, nie der Roh-Token.
 - **Token-Format:** `mdex_<base64url(32 Random-Bytes)>`. Bei `token new` einmalig
   angezeigt, danach nur noch der Hash im Store.
+- **Dateirechte:** Datei `0600`, Verzeichnis `0700` (POSIX). Schreibzugriff auf die
+  Datei = Vollkompromiss (siehe Threat-Model). Geschrieben wird **atomar**
+  (Temp-Datei + rename), damit der watchende Server nie eine halbe Datei liest.
 
 ### Auth-Mechanik (Request-Lebenslauf)
 
@@ -151,10 +206,15 @@ Datei **außerhalb des Vault-Repos**: `~/.config/mdex-mcp/tokens.json`. Liste vo
 2. **`AuthenticationHandler`** liest `Authorization: Bearer <token>`, hasht
    (SHA-256), schlägt im Store nach → setzt die Rolle als Claim. Kein Treffer →
    `401`. Gebunden an die MCP-Route via `MapMcp().RequireAuthorization(...)`.
-3. **Pro-Tool-Check:** Ein MCP-Tool-Invocation-Filter liest das Mindest-Level des
-   aufgerufenen Tools + die Rolle aus dem `HttpContext`. `tokenLevel < toolLevel`
-   → Fehler (`403`-Äquivalent als Tool-Error). Read-Tools brauchen nur einen
-   gültigen Token; Intent-/Raw-FS-Tools das entsprechende Level.
+3. **Pro-Tool-Check (default-deny):** Jedes Tool deklariert sein Mindest-Level über
+   ein `[MinRole]`-Attribut und ruft zur Laufzeit `ToolAuthorizer.Require` mit der
+   Rolle aus dem `HttpContext`. **Default-deny ist als CI-Invariante erzwungen:** ein
+   Reflection-Guard-Test rotet den Build, wenn ein `[McpServerTool]` kein `[MinRole]`
+   (oder keinen `ToolAuthorizer`) trägt – ein vergessenes Tor öffnet so kein Tool
+   (Phase 2 D-2). `tokenLevel < toolLevel` → Fehler (`403`-Äquivalent als Tool-Error).
+   Read-Tools brauchen nur einen gültigen Token; Intent-/Raw-FS-Tools das entsprechende
+   Level. *Zielzustand:* ein zentraler Invocation-Filter liest `[MinRole]` und ersetzt
+   die Pro-Methoden-Aufrufe, sobald der SDK-Hook bestätigt ist.
 4. Tool-Handler → `MdexBackend` → Ergebnis zurück.
 
 ### Hot-Reload des Stores
@@ -189,8 +249,8 @@ Kopplung an systemd. Teilt mit dem Server nur den Pfad zur `tokens.json`
   Legacy-SSE-Endpunkte (`/sse`, `/message`) sind im SDK standardmäßig aus und
   werden via `HttpServerTransportOptions.EnableLegacySse = true` zugeschaltet.
 - **Config** (Quelle: `appsettings.json` + Env-Vars, Env gewinnt): `MDEX_ROOT`,
-  Listen-URL/Port, Pfad zur `tokens.json`. Kestrel bindet auf `localhost` hinter
-  dem Reverse-Proxy.
+  Listen-URL/Port, Pfad zur `tokens.json`. Kestrel bindet auf `127.0.0.1` hinter
+  dem Reverse-Proxy (nie öffentlich ohne TLS-Proxy – siehe Threat-Model).
 
 ## G. Deployment
 

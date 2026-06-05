@@ -10,13 +10,16 @@
 
 > **Design deviations carried from the spec:** in-process instead of subprocess (supersedes 2026-06-01 §5); three roles instead of two (supersedes §2).
 
-> **Robust argument passing (Task 1B):** `ArgReader` originally treated any token starting with `--` as a flag, so a value (content *or* a positional like a search query) that itself begins with `--` was dropped. Task 1B hardens it with two POSIX/GNU conventions — `--key=value` (attached value, may start with anything) and `--` (end-of-options; remaining tokens are positionals). The MCP tools then build args by one uniform rule: **value-flags as `--key=value`, boolean flags bare, then `--`, then positionals** — bulletproof for any content (newlines, `=`, leading `--`, empty). Backward compatible: the space form `--content "text"` still works.
+> **PREREQUISITE — run the mdext security fixes first:** This plan assumes [2026-06-05-mdext-security-fixes-plan.md](2026-06-05-mdext-security-fixes-plan.md) has already landed. That plan (a) hardens `ArgReader` (`--key=value` + `--` end-of-options) and (b) closes the Phase-1 vault-escape findings (HIGH-1 slug/path bypass, empty/root targets, symlinks) **on which this role ladder depends** — without them, `read` = "read any `.md` on the host." Task 1B no longer lives here; it is Task 1 of the prerequisite plan.
+
+> **Robust argument passing (from the prerequisite):** With the hardened `ArgReader`, the MCP tools build args by one uniform rule: **value-flags as `--key=value`, boolean flags bare, then `--`, then positionals** — bulletproof for any content (newlines, `=`, leading `--`, empty). Backward compatible: the space form `--content "text"` still works.
 
 ---
 
 ## Prerequisites
 
 - `dotnet --version` → `10.*`.
+- **The prerequisite plan [2026-06-05-mdext-security-fixes-plan.md](2026-06-05-mdext-security-fixes-plan.md) has landed** (hardened `ArgReader` + closed vault-escape findings). This plan's tools and the Task 1 sanitization test assume it.
 - Repo is `mdex-tooling` with the existing `Mdex.sln`, `src/Mdex.Cli`, `tests/Mdex.Cli.Tests`; `dotnet test` is green before starting.
 - Commands below use repo-root-relative paths; run them from the repo root.
 
@@ -27,9 +30,9 @@
 ```
 src/
   Mdex.Cli/
-    Cli/CliDispatcher.cs        NEW  reusable in-process entry → JSON envelope
-    Cli/ArgReader.cs            MOD  --key=value + -- end-of-options (Task 1B)
+    Cli/CliDispatcher.cs        NEW  reusable in-process entry → JSON envelope (broad catch, sanitized)
     Program.cs                  MOD  use CliDispatcher.BuildContext
+    (ArgReader + PathGuard already hardened by the prerequisite plan)
   Mdex.Tokens/                  NEW  library
     Mdex.Tokens.csproj
     Role.cs                     Role enum + Roles wire-format helper
@@ -46,6 +49,7 @@ src/
   Mdex.Mcp/                     NEW  ASP.NET Core → mdex-mcp
     Mdex.Mcp.csproj
     MdexBackend.cs              in-process call into CliDispatcher
+    Auth/MinRoleAttribute.cs    declares each tool's minimum role (default-deny guard)
     Auth/BearerAuthHandler.cs   bearer → role claim
     Auth/ToolAuthorizer.cs      per-tool role gate
     Tools/ReadTools.cs          9 read tools
@@ -94,13 +98,33 @@ public class CliDispatcherTests
         Assert.Contains("\"ok\": true", json);
         Assert.Contains("0.1.0", json);
     }
+
+    [Fact]
+    public void RunToJson_unexpected_exception_is_sanitized_not_leaked()
+    {
+        // A non-CommandException (here: Directory.CreateDirectory over a *file*) must be
+        // caught and returned as a generic envelope — no stack trace, no absolute path.
+        var root = Path.Combine(Path.GetTempPath(), "mdex-disp-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(root);
+        File.WriteAllText(Path.Combine(root, "blocker"), "x");   // a FILE where a dir is needed
+        try
+        {
+            var json = CliDispatcher.RunToJson("write-file",
+                new[] { "--content=hi", "--", "blocker/child" }, root);
+            Assert.Contains("\"ok\": false", json);
+            Assert.Contains("internal error", json);
+            Assert.DoesNotContain("blocker", json);              // no path leaked
+            Assert.DoesNotContain("Exception", json);            // no stack/type leaked
+        }
+        finally { try { Directory.Delete(root, true); } catch { } }
+    }
 }
 ```
 
 - [ ] **Step 2: Run test to verify it fails**
 
 Run: `dotnet test tests/Mdex.Cli.Tests --filter CliDispatcherTests`
-Expected: FAIL — `CliDispatcher` does not exist (compile error).
+Expected: FAIL — `CliDispatcher` does not exist (compile error). The sanitization test additionally relies on the prerequisite plan's hardened `ArgReader` (`--content=` / `--`), which must already be landed.
 
 - [ ] **Step 3: Create `CliDispatcher`**
 
@@ -132,6 +156,13 @@ public static class CliDispatcher
         catch (CommandException ex)
         {
             return JsonEnvelope.Err(verb, ex.Message, ex.Details);
+        }
+        catch (Exception ex)
+        {
+            // Never leak a .NET stack trace / absolute path to the (untrusted) MCP caller.
+            // Log the detail server-side; return a generic envelope. (Phase-2 D-4 / Phase-1 MEDIUM-5.)
+            Console.Error.WriteLine($"[mdex] unexpected error in '{verb}': {ex}");
+            return JsonEnvelope.Err(verb, "internal error");
         }
     }
 
@@ -186,115 +217,12 @@ git commit -m "Refactor: extract CliDispatcher for in-process reuse"
 
 ---
 
-## Task 1B: Harden `ArgReader` (`--key=value` + `--` end-of-options)
+## Task 1B: ~~Harden `ArgReader`~~ → moved to the prerequisite plan
 
-Make argument parsing robust so any user value — content or a positional — survives even when it begins with `--`. This is a CLI improvement that the MCP arg-building (Tasks 13–15) relies on.
-
-**Files:**
-- Modify: `src/Mdex.Cli/Cli/ArgReader.cs:9-26`
-- Test: `tests/Mdex.Cli.Tests/ArgReaderTests.cs`
-
-- [ ] **Step 1: Write the failing test**
-
-```csharp
-// tests/Mdex.Cli.Tests/ArgReaderTests.cs
-using Mdex.Cli.Cli;
-namespace Mdex.Cli.Tests;
-
-public class ArgReaderTests
-{
-    [Fact]
-    public void Equals_form_keeps_leading_dashes_in_value()
-    {
-        var r = new ArgReader(new[] { "--content=--- a dashy line" });
-        Assert.Equal("--- a dashy line", r.Flag("--content"));
-    }
-
-    [Fact]
-    public void Equals_form_allows_empty_value()
-    {
-        var r = new ArgReader(new[] { "--content=" });
-        Assert.Equal("", r.Flag("--content"));
-    }
-
-    [Fact]
-    public void Equals_form_splits_on_first_equals_only()
-    {
-        var r = new ArgReader(new[] { "--content=a=b=c" });
-        Assert.Equal("a=b=c", r.Flag("--content"));
-    }
-
-    [Fact]
-    public void End_of_options_makes_dashy_token_positional()
-    {
-        var r = new ArgReader(new[] { "--", "--weird" });
-        Assert.Equal("--weird", r.Positional(0));
-        Assert.False(r.Has("--weird"));
-    }
-
-    [Fact]
-    public void Flags_before_separator_then_positionals_after()
-    {
-        var r = new ArgReader(new[] { "--maxhops=3", "--recursive", "--", "--weird-slug" });
-        Assert.Equal("3", r.Flag("--maxhops"));
-        Assert.True(r.Has("--recursive"));
-        Assert.Equal("--weird-slug", r.Positional(0));
-    }
-
-    [Fact]
-    public void Space_form_and_boolean_flag_still_work()
-    {
-        var r = new ArgReader(new[] { "--content", "text", "--recursive" });
-        Assert.Equal("text", r.Flag("--content"));
-        Assert.True(r.Has("--recursive"));
-        Assert.Null(r.Flag("--recursive"));
-    }
-}
-```
-
-- [ ] **Step 2: Run test to verify it fails**
-
-Run: `dotnet test tests/Mdex.Cli.Tests --filter ArgReaderTests`
-Expected: FAIL — `Equals_form_*` and `End_of_options_*` fail (value lost / token treated as flag).
-
-- [ ] **Step 3: Rewrite the `ArgReader` constructor**
-
-Replace the constructor body (`src/Mdex.Cli/Cli/ArgReader.cs:9-26`) with:
-
-```csharp
-    public ArgReader(string[] args)
-    {
-        var positionalsOnly = false;
-        for (var i = 0; i < args.Length; i++)
-        {
-            var arg = args[i];
-
-            if (!positionalsOnly && arg == "--") { positionalsOnly = true; continue; }  // end-of-options
-
-            if (!positionalsOnly && arg.StartsWith("--"))
-            {
-                var eq = arg.IndexOf('=');
-                if (eq >= 0) _flags[arg[..eq]] = arg[(eq + 1)..];                        // --key=value
-                else if (i + 1 < args.Length && !args[i + 1].StartsWith("--"))
-                    _flags[arg] = args[++i];                                             // --key value
-                else _flags[arg] = null;                                                // boolean --key
-            }
-            else _positionals.Add(arg);
-        }
-    }
-```
-
-- [ ] **Step 4: Run the new test and the full CLI suite**
-
-Run: `dotnet test tests/Mdex.Cli.Tests`
-Expected: PASS — `ArgReaderTests` green and every pre-existing test still green (the space and boolean forms are unchanged).
-
-- [ ] **Step 5: Commit**
-
-```bash
-git add src/Mdex.Cli/Cli/ArgReader.cs tests/Mdex.Cli.Tests/ArgReaderTests.cs
-git commit -m "Harden ArgReader: --key=value and -- end-of-options"
-```
+`ArgReader` hardening (`--key=value` + `--` end-of-options) now lives in
+[2026-06-05-mdext-security-fixes-plan.md](2026-06-05-mdext-security-fixes-plan.md) **Task 1**,
+alongside the vault-escape fixes it shares a file-area with. It is a prerequisite for this plan —
+nothing to do here. The MCP tools (Tasks 13–15) build args assuming it is in place.
 
 ---
 
@@ -584,6 +512,15 @@ public class TokenStoreTests : IDisposable
         Assert.False(store.Remove("a"));
         Assert.Null(store.FindRole("mdex_a"));
     }
+
+    [Fact]
+    public void Saved_file_is_owner_only_on_posix()   // Phase-2 D-3
+    {
+        if (OperatingSystem.IsWindows()) return;
+        var store = new TokenStore(_path);
+        store.Add(new TokenEntry(TokenHasher.Hash("mdex_x"), Roles.ToWire(Role.Read), "x", "2026-06-04"));
+        Assert.Equal(UnixFileMode.UserRead | UnixFileMode.UserWrite, File.GetUnixFileMode(_path)); // 0600
+    }
 }
 ```
 
@@ -656,8 +593,24 @@ public sealed class TokenStore
 
     void Save()
     {
-        Directory.CreateDirectory(Path.GetDirectoryName(Path.GetFullPath(_path))!);
-        File.WriteAllText(_path, JsonSerializer.Serialize(_entries, Opts));
+        var dir = Path.GetDirectoryName(Path.GetFullPath(_path))!;
+        Directory.CreateDirectory(dir);
+        HardenPermissions(dir, isDirectory: true);            // 0700 (Phase-2 D-3)
+
+        // Atomic write: serialize to a temp file in the same dir, then rename over the target,
+        // so the watching server never reads a half-written file (Phase-2 D-6).
+        var tmp = Path.Combine(dir, Path.GetFileName(_path) + "." + Guid.NewGuid().ToString("N") + ".tmp");
+        File.WriteAllText(tmp, JsonSerializer.Serialize(_entries, Opts));
+        HardenPermissions(tmp, isDirectory: false);           // 0600 before it becomes the live file
+        File.Move(tmp, _path, overwrite: true);
+    }
+
+    static void HardenPermissions(string path, bool isDirectory)
+    {
+        if (OperatingSystem.IsWindows()) return;              // POSIX-only; on Windows rely on ACL inheritance
+        var mode = isDirectory ? UnixFileMode.UserRead | UnixFileMode.UserWrite | UnixFileMode.UserExecute
+                               : UnixFileMode.UserRead | UnixFileMode.UserWrite;
+        try { File.SetUnixFileMode(path, mode); } catch { /* best-effort: FS may not support it */ }
     }
 
     static List<TokenEntry> Load(string path)
@@ -1624,6 +1577,99 @@ git commit -m "Add 5 raw-fs MCP tools"
 
 ---
 
+## Task 15B: Default-deny guard — `[MinRole]` + reflection invariant (D-2)
+
+The per-method `auth.Require(...)` calls in Tasks 13–15 are *opt-in*: a future tool that forgets the call is silently open to any authenticated token (Phase-2 D-2). This task makes "every tool declares and enforces a minimum role" a **CI invariant**: each tool carries a machine-readable `[MinRole]`, and a reflection test fails the build if any `[McpServerTool]` lacks it or lacks the `ToolAuthorizer` it needs to gate. The attribute is also the single declared source a central invocation filter can read later (see the follow-up note).
+
+**Files:**
+- Create: `src/Mdex.Mcp/Auth/MinRoleAttribute.cs`
+- Modify: `src/Mdex.Mcp/Tools/ReadTools.cs`, `IntentTools.cs`, `RawFsTools.cs` (annotate each tool)
+- Test: `tests/Mdex.Mcp.Tests/ToolGateGuardTests.cs`
+
+- [ ] **Step 1: Add the attribute**
+
+```csharp
+// src/Mdex.Mcp/Auth/MinRoleAttribute.cs
+using Mdex.Tokens;
+
+namespace Mdex.Mcp.Auth;
+
+/// <summary>Declares the minimum role a tool requires. Presence is enforced by ToolGateGuardTests,
+/// so a tool without it fails the build (default-deny). Mirrors the in-method auth.Require(...) call.</summary>
+[AttributeUsage(AttributeTargets.Method)]
+public sealed class MinRoleAttribute(Role minimum) : Attribute
+{
+    public Role Minimum { get; } = minimum;
+}
+```
+
+- [ ] **Step 2: Annotate every tool method**
+
+Add the attribute directly above each `[McpServerTool]` (the role mirrors the existing `auth.Require(...)` first line), per group:
+- `Tools/ReadTools.cs` — every method: `[McpServerTool, MinRole(Role.Read)]`
+- `Tools/IntentTools.cs` — every method: `[McpServerTool, MinRole(Role.WriteIntent)]`
+- `Tools/RawFsTools.cs` — every method: `[McpServerTool, MinRole(Role.FullWrite)]`
+
+Each file already has `using Mdex.Tokens;`; ensure `using Mdex.Mcp.Auth;` is present (ReadTools/IntentTools/RawFsTools already import it for `ToolAuthorizer`).
+
+- [ ] **Step 3: Write the guard test**
+
+```csharp
+// tests/Mdex.Mcp.Tests/ToolGateGuardTests.cs
+using System.Reflection;
+using ModelContextProtocol.Server;
+using Mdex.Mcp.Auth;
+namespace Mdex.Mcp.Tests;
+
+public class ToolGateGuardTests
+{
+    static IEnumerable<MethodInfo> Tools() =>
+        typeof(MdexBackend).Assembly.GetTypes()
+            .SelectMany(t => t.GetMethods(BindingFlags.Public | BindingFlags.Static | BindingFlags.Instance))
+            .Where(m => m.GetCustomAttribute<McpServerToolAttribute>() is not null);
+
+    [Fact]
+    public void There_are_tools_to_check()
+        => Assert.Equal(19, Tools().Count());   // 9 read + 5 intent + 5 raw-fs
+
+    [Fact]
+    public void Every_tool_declares_a_minimum_role()
+    {
+        var missing = Tools().Where(m => m.GetCustomAttribute<MinRoleAttribute>() is null)
+                             .Select(m => m.Name).ToArray();
+        Assert.True(missing.Length == 0, "tools without [MinRole]: " + string.Join(", ", missing));
+    }
+
+    [Fact]
+    public void Every_tool_takes_the_authorizer_it_needs_to_gate()
+    {
+        var ungated = Tools().Where(m => m.GetParameters().All(p => p.ParameterType != typeof(ToolAuthorizer)))
+                            .Select(m => m.Name).ToArray();
+        Assert.True(ungated.Length == 0, "tools without ToolAuthorizer param: " + string.Join(", ", ungated));
+    }
+}
+```
+
+- [ ] **Step 4: Run the guard test**
+
+Run: `dotnet test tests/Mdex.Mcp.Tests --filter ToolGateGuardTests`
+Expected: PASS once every tool is annotated. If `There_are_tools_to_check` reports a different count, reconcile against the 14-tool spec (note: `get_by_date_range` etc. count once each; the total method count is 19 across the three groups).
+
+- [ ] **Step 5: Commit**
+
+```bash
+git add src/Mdex.Mcp/Auth/MinRoleAttribute.cs src/Mdex.Mcp/Tools tests/Mdex.Mcp.Tests/ToolGateGuardTests.cs
+git commit -m "Enforce default-deny: every MCP tool must declare [MinRole]"
+```
+
+> **Follow-up (stronger enforcement, optional):** Once the installed MCP SDK's tool-invocation
+> hook is confirmed (an `IMcpServer*Filter`/middleware that wraps each call), move enforcement into a
+> single filter that reads `[MinRole]` and calls `ToolAuthorizer.Require` centrally, then delete the
+> per-method `auth.Require(...)` lines. The attribute and guard test already in place make that a
+> mechanical change; until then, the guard test is the default-deny invariant.
+
+---
+
 ## Task 16: Server host wiring + config
 
 **Files:**
@@ -1686,7 +1732,7 @@ public partial class Program { }   // expose entry point to WebApplicationFactor
 ```json
 {
   "Logging": { "LogLevel": { "Default": "Information", "Microsoft.AspNetCore": "Warning" } },
-  "Kestrel": { "Endpoints": { "Http": { "Url": "http://localhost:3001" } } },
+  "Kestrel": { "Endpoints": { "Http": { "Url": "http://127.0.0.1:3001" } } },
   "Mdex": {
     "Root": "",
     "TokenStore": ""
@@ -1695,6 +1741,8 @@ public partial class Program { }   // expose entry point to WebApplicationFactor
 ```
 
 > Empty `Mdex:Root`/`Mdex:TokenStore` mean "fall back to env / default path". On the server, `MDEX_ROOT` is set by systemd (Task 18) and `TokenStore` defaults to `~/.config/mdex-mcp/tokens.json`.
+
+> **Bind invariant (Phase-2 D-7):** Kestrel binds `127.0.0.1` only — never a public interface without the TLS reverse-proxy in front. A bearer token over plain HTTP on a public interface would travel in clear text. The loopback hop (proxy → Kestrel) is the only place plain HTTP is acceptable.
 
 - [ ] **Step 3: Build**
 
@@ -1707,7 +1755,7 @@ Run:
 ```bash
 MDEX_ROOT=$(mktemp -d) dotnet run --project src/Mdex.Mcp &
 sleep 3
-curl -s -o /dev/null -w "%{http_code}\n" -X POST http://localhost:3001/ -H "Content-Type: application/json" -d '{}'
+curl -s -o /dev/null -w "%{http_code}\n" -X POST http://127.0.0.1:3001/ -H "Content-Type: application/json" -d '{}'
 kill %1
 ```
 Expected: prints `401`.
@@ -1862,7 +1910,8 @@ It calls `mdext` in-process (same `--json` envelope) and gates every tool by rol
 
 **Config:** `MDEX_ROOT` (vault), `Mdex:TokenStore` or `MDEX_MCP_TOKENS`
 (default `~/.config/mdex-mcp/tokens.json`), Kestrel URL in `appsettings.json`.
-Run behind a TLS reverse proxy; the server binds `localhost`.
+Run behind a TLS reverse proxy; the server binds `127.0.0.1` only — never a public
+interface without the proxy (a bearer token over plain HTTP would be in clear text).
 
 ## mdex-mcpctl (token admin)
 
@@ -1906,6 +1955,8 @@ git commit -m "Add deployment unit and document mdex-mcp + mdex-mcpctl"
 ## Self-Review notes (for the implementer)
 
 - **Spec coverage:** A=Tasks 1,8,9; B=Task 10; C=Tasks 13–15; D(roles)=Task 3; D(store)=Tasks 5–7; D(auth)=Tasks 11–12,16; D(hot-reload)=Task 6; E=Task 8; F=Task 16; G=Task 18; H=Tasks 10,11,17 + per-verb behaviour in existing `Mdex.Cli.Tests`.
-- **Two known soft spots, both flagged inline with a fallback instruction rather than a guess:** the `EnableLegacySse` property name (Task 16) and the `MapMcp` endpoint path (Task 17). Both are one-line adjustments if the installed SDK differs.
-- **Robust arg passing:** Task 1B hardens `ArgReader` (`--key=value` + `--` end-of-options); Tasks 13–15 build args by the uniform rule (value-flags `--key=value`, booleans bare, then `--`, then positionals), so any content or positional — including values beginning with `--` — round-trips intact. The low-level `MdexBackend` tests (Task 10) pass plain positionals (no leading `--`), which need no separator.
+- **Security-review coverage (Phase 2):** threat-model + the mdext containment prerequisite = [2026-06-05-mdext-security-fixes-plan.md](2026-06-05-mdext-security-fixes-plan.md) (D-1); default-deny guard = Task 15B (D-2); token-file `0600`/`0700` + atomic write = Task 5 (D-3, D-6); sanitized dispatcher catch = Task 1 (D-4); root-target reject reaches MCP via the prerequisite (D-5); `127.0.0.1` bind = Task 16 (D-7); no-expiry tradeoff = documented in the spec threat-model (D-8).
+- **Task 1B moved out:** `ArgReader` hardening now lives in the prerequisite plan (its Task 1), bundled with the vault-escape fixes. **Run the prerequisite plan before Task 1 here.**
+- **Two known SDK soft spots, both flagged inline with a fallback instruction rather than a guess:** the `EnableLegacySse` property name (Task 16) and the `MapMcp` endpoint path (Task 17). A third, optional, is the central invocation filter (Task 15B follow-up). All are localized adjustments if the installed SDK differs.
+- **Robust arg passing:** the prerequisite plan hardens `ArgReader` (`--key=value` + `--` end-of-options); Tasks 13–15 build args by the uniform rule (value-flags `--key=value`, booleans bare, then `--`, then positionals), so any content or positional — including values beginning with `--` — round-trips intact. The low-level `MdexBackend` tests (Task 10) pass plain positionals (no leading `--`), which need no separator.
 ```
