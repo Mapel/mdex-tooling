@@ -8,15 +8,22 @@ public sealed class ArgReader
 
     public ArgReader(string[] args)
     {
+        var positionalsOnly = false;
         for (var i = 0; i < args.Length; i++)
         {
-            if (args[i].StartsWith("--"))
+            var arg = args[i];
+
+            if (!positionalsOnly && arg == "--") { positionalsOnly = true; continue; }  // end-of-options
+
+            if (!positionalsOnly && arg.StartsWith("--"))
             {
-                var key = args[i];
-                if (i + 1 < args.Length && !args[i + 1].StartsWith("--")) { _flags[key] = args[++i]; }
-                else _flags[key] = null; // boolean flag
+                var eq = arg.IndexOf('=');
+                if (eq >= 0) _flags[arg[..eq]] = arg[(eq + 1)..];                         // --key=value
+                else if (i + 1 < args.Length && !args[i + 1].StartsWith("--"))
+                    _flags[arg] = args[++i];                                              // --key value
+                else _flags[arg] = null;                                                 // boolean --key
             }
-            else _positionals.Add(args[i]);
+            else _positionals.Add(arg);
         }
     }
 
