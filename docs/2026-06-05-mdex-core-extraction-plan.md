@@ -222,11 +222,12 @@ git -C $REPO commit -m "refactor: move Cli/Commands/Vault into Mdex.Core (no beh
 
 ## Task 3: Extract `CommandEngine` and delegate `Program.cs` to it
 
-The dispatch logic (resolve vault → build `CliContext` → look up verb → run) is currently inline in `Program.cs`, so nothing else can reuse it. Extract it into a testable `CommandEngine` in `Mdex.Core`. This is the in-process entry Plan B's MCP tools call. The engine returns a `CommandResult` (the `Data` **object**, not a JSON string) — that is the design's §3 refinement over Plan-2's `RunToJson`.
+The dispatch logic (resolve vault → build `CliContext` → look up verb → run) is currently inline in `Program.cs`, so nothing else can reuse it. Extract it into a testable `CommandEngine` in `Mdex.Core`. This is the in-process entry Plan B's MCP tools call. The engine returns a `CommandResult` (the `Data` **object**, not a JSON string) — that is the design's §3 refinement over Plan-2's `RunToJson`. We also **drop the `json` flag** from the engine and from `CliContext`: it was only a render hint (no command reads `ctx.Json` — verified), so *how* to render stays purely the CLI's concern. This is the one place this phase does slightly more than "just move".
 
 **Files:**
 - Create: `src/Mdex.Core/Cli/CommandEngine.cs`
-- Test: `tests/Mdex.Core.Tests/CommandEngineTests.cs`
+- Modify: `src/Mdex.Core/Cli/ICommand.cs` (remove `CliContext.Json`)
+- Test: `tests/Mdex.Core.Tests/CommandEngineTests.cs` + the test context helpers (drop `Json = false`)
 - Modify: `src/Mdex.Cli/Program.cs`
 
 - [ ] **Step 1: Write the failing test** (`tests/Mdex.Core.Tests/CommandEngineTests.cs`)
@@ -241,7 +242,7 @@ public class CommandEngineTests
     public void Runs_a_no_vault_command()
     {
         var engine = CommandEngine.Default();
-        var result = engine.Run("version", Array.Empty<string>(), rootFlag: null, json: false);
+        var result = engine.Run("version", Array.Empty<string>(), rootFlag: null);
         Assert.Contains("version", System.Text.Json.JsonSerializer.Serialize(result.Data));
     }
 
@@ -251,7 +252,7 @@ public class CommandEngineTests
         using var v = new TestVault();
         v.WriteNote("zettel/a.md", "---\ntype: zettel\ntags: [x]\n---\n# A\n");
         var engine = CommandEngine.Default();
-        var result = engine.Run("list-tags", Array.Empty<string>(), rootFlag: v.Root, json: false);
+        var result = engine.Run("list-tags", Array.Empty<string>(), rootFlag: v.Root);
         Assert.Contains("\"tag\":\"x\"",
             System.Text.Json.JsonSerializer.Serialize(result.Data).Replace(" ", ""));
     }
@@ -261,7 +262,7 @@ public class CommandEngineTests
     {
         var engine = CommandEngine.Default();
         Assert.Throws<CommandException>(
-            () => engine.Run("nope", Array.Empty<string>(), rootFlag: null, json: false));
+            () => engine.Run("nope", Array.Empty<string>(), rootFlag: null));
     }
 }
 ```
@@ -271,8 +272,14 @@ public class CommandEngineTests
 Run: `dotnet test "$REPO\Mdex.sln" --filter CommandEngineTests`
 Expected: FAIL (does not compile / type not found).
 
-- [ ] **Step 3: Implement `CommandEngine`** (`src/Mdex.Core/Cli/CommandEngine.cs`)
+- [ ] **Step 3: Remove `CliContext.Json`, add `CommandEngine`, fix the test helpers** (these land together so the project compiles)
 
+First, in `src/Mdex.Core/Cli/ICommand.cs` delete the now-dead render flag from `CliContext` — remove this line entirely:
+```csharp
+    public required bool Json { get; init; }
+```
+
+Then create `src/Mdex.Core/Cli/CommandEngine.cs`:
 ```csharp
 using Mdex.Core.Commands;
 using Mdex.Core.Vault;
@@ -283,7 +290,7 @@ namespace Mdex.Core.Cli;
 /// The single in-process entry point for running a verb. The CLI (Program.cs) and —
 /// in later phases — the MCP tool layer both go through here, so there is exactly one
 /// implementation of "resolve vault, build context, dispatch". Returns the operation's
-/// <see cref="CommandResult"/> (the Data object); callers choose how to render it.
+/// <see cref="CommandResult"/> (the Data object); the caller decides how to render it.
 /// </summary>
 public sealed class CommandEngine
 {
@@ -306,34 +313,39 @@ public sealed class CommandEngine
     /// Throws <see cref="CommandException"/> for an unknown verb or a user-facing failure;
     /// other exceptions propagate (callers sanitise — CLI prints, MCP layer maps).
     /// </summary>
-    public CommandResult Run(string verb, string[] args, string? rootFlag, bool json)
+    public CommandResult Run(string verb, string[] args, string? rootFlag)
     {
         var command = _registry.Get(verb)
             ?? throw new CommandException($"unknown command '{verb}'");
-        var ctx = BuildContext(rootFlag, json, command.NeedsVault);
+        var ctx = BuildContext(rootFlag, command.NeedsVault);
         return command.Run(args, ctx);
     }
 
     /// <summary>Build the execution context; vault services are only wired when needed.</summary>
-    public CliContext BuildContext(string? rootFlag, bool json, bool needsVault)
+    public CliContext BuildContext(string? rootFlag, bool needsVault)
     {
         if (!needsVault)
-            return new CliContext
-            {
-                VaultRoot = "", Json = json,
-                Repo = null!, Guard = null!, Templates = null!,
-            };
+            return new CliContext { VaultRoot = "", Repo = null!, Guard = null!, Templates = null! };
 
         var root = VaultResolver.Resolve(rootFlag);
         var guard = new PathGuard(root);
         return new CliContext
         {
-            VaultRoot = root, Json = json,
+            VaultRoot = root,
             Repo = new NoteRepository(root, guard),
             Guard = guard,
             Templates = new TemplateService(root),
         };
     }
+}
+```
+
+Then drop the now-invalid `Json = false` the test context helpers still pass. Targeted replace over the test project:
+```powershell
+$REPO = "C:\Users\MichaelDiesen\repos\mdex-tooling"
+Get-ChildItem "$REPO\tests\Mdex.Core.Tests" -Recurse -Filter *.cs | ForEach-Object {
+  $t = [IO.File]::ReadAllText($_.FullName)
+  [IO.File]::WriteAllText($_.FullName, ($t -replace '\s*Json = false,', ''))
 }
 ```
 
@@ -400,7 +412,7 @@ for (var i = 0; i < rest.Length; i++)
 
 try
 {
-    var result = engine.Run(verb, cleaned.ToArray(), rootFlag, json);
+    var result = engine.Run(verb, cleaned.ToArray(), rootFlag);
     Console.WriteLine(json ? JsonEnvelope.Ok(verb, result.Data) : result.HumanText);
     return 0;
 }
@@ -499,7 +511,7 @@ git -C $REPO commit -am "refactor: rename binary mdext -> mdex-cli"
 ## Self-Review (against the design)
 
 - **§1 (4-Binary-Familie, `Mdex.Core`):** Task 1–2 create the lib and move operations in; `Mdex.Cli`→`mdex-cli` (Task 4). ✔
-- **§3 (In-Process: Data-Objekt statt Envelope-Parse):** `CommandEngine.Run` returns `CommandResult` (Data object), not a JSON string. ✔
+- **§3 (In-Process: Data-Objekt statt Envelope-Parse):** `CommandEngine.Run` returns `CommandResult` (Data object), not a JSON string, and carries **no** `json`/render flag (dropped from engine + `CliContext`). ✔
 - **Security gate N-2 (Core-Extraktion = Regressionsrisiko):** pure move; containment tests travel and stay green (Task 2 Step 7, Task 3 Step 6, Task 4 Step 4). ✔
 - **Out of scope here (correct):** `Mdex.Mcp.Tools`, hosts, tokens — Plan B/C. The `[MinRole]` attribute and role authorizer are **not** introduced in this phase; `CommandEngine` carries no role concept yet (roles enter at the tool layer in Plan B).
 - **Placeholder scan:** none — every step has exact files, commands and code.
