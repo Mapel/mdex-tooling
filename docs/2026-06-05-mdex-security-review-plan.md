@@ -3,7 +3,7 @@
 **Stand:** 2026-06-05
 **Ziel:** Sicherheitsbetrachtung des mdex-Toolings in drei Phasen, abgestimmt auf den Entwicklungsstand. Tragende Annahmen früh validieren, neue Angriffsfläche reviewen, sobald sie existiert.
 
-**Leitgedanke:** `mdex-mcp` ruft `mdext` **in-process** auf (siehe `2026-06-04-mdex-mcp-design.md`). Damit erbt der Server mdexts Sicherheitseigenschaften direkt: PathGuard, ArgReader und der JsonEnvelope-Vertrag *sind* die Sicherheitsgrenze, sobald die Tools in-process laufen. Deshalb wird mdexts Fundament vor der Auth-Schicht geprüft, nicht erst danach.
+**Leitgedanke:** Der MCP-Host ruft die mdex-Operationen **in-process** auf. Damit erbt der Server mdexts Sicherheitseigenschaften direkt: PathGuard, ArgReader und der JsonEnvelope-Vertrag *sind* die Sicherheitsgrenze, sobald die Tools in-process laufen. Deshalb wird mdexts Fundament vor der Auth-Schicht geprüft, nicht erst danach.
 
 **Verfügbare Hilfsmittel:**
 - `security-guidance` (Hook) — warnt passiv beim Editieren vor Mustern wie Command-Injection/unsicheren Patterns. Aktiv während der Implementierung (Phase 3).
@@ -41,13 +41,13 @@ Eng geschnitten: nur die Eigenschaften, auf die sich `mdex-mcp` tatsächlich st�
 
 **Zu ArgReader/Task 1B:** Die Free-Text-Ambiguität (`--content` beginnt mit `--`) ist ein Korrektheitsthema, von Task 1B abgedeckt, **kein** Injection-Vektor. Wichtig: Task 1B fixt HIGH-1 **nicht** — das Traversal sitzt im Resolver/`NoteRepository`, nicht im Arg-Parser. Zwei getrennte Baustellen.
 
-> **Status (2026-06-05): Phase-1-Fixes gelandet** auf Branch `mdext-security-fixes` via [2026-06-05-mdext-security-fixes-plan.md](2026-06-05-mdext-security-fixes-plan.md). Alle drei PoCs (Read-/Write-Traversal, `delete ""`-Root-Wipe) erneut geprüft → dicht; 87 Tests grün. HIGH-1, MED-2, MED-3, LOW-MED-4 + ArgReader-Härtung umgesetzt.
+> **Status (2026-06-05): Phase-1-Fixes gelandet** auf Branch `mdext-security-fixes`. Alle drei PoCs (Read-/Write-Traversal, `delete ""`-Root-Wipe) erneut geprüft → dicht; 87 Tests grün. HIGH-1, MED-2, MED-3, LOW-MED-4 + ArgReader-Härtung umgesetzt.
 
 ---
 
 ## Phase 2 — Security-Design-Check von mdex-mcp  *(abgeschlossen 2026-06-05)*
 
-Review von Spec (`2026-06-04-mdex-mcp-design.md`) + Plan (`2026-06-04-mdex-mcp-plan.md`) auf Design-Ebene — noch bevor Code existiert.
+Review des MCP-Designs auf Design-Ebene — noch bevor Code existiert.
 
 - [x] Threat Model · TLS/Transport · Rollen-Ladder/Default-Deny · Token-Hashing · tokens.json-Permissions · Positiv-Befunde.
 
@@ -85,7 +85,7 @@ Review von Spec (`2026-06-04-mdex-mcp-design.md`) + Plan (`2026-06-04-mdex-mcp-p
 
 ## Phase 2-Delta — Re-Check nach Design-Änderung  *(abgeschlossen 2026-06-05)*
 
-Phase 2 (oben) prüfte das **abgelöste** Plan-2-Design (remote-only). Das neue Design
+Phase 2 (oben) prüfte das frühere remote-only-Design. Das neue Design
 ([2026-06-05-mdex-mcp-local-remote-design.md](2026-06-05-mdex-mcp-local-remote-design.md))
 führt **lokal + remote**, eine **4-Binary-Familie** (umbenannt: altes `mdex-mcp` =
 remote = jetzt `mdex-gateway`; neues `mdex-mcp` = lokaler stdio-Host) und die Extraktion
@@ -99,7 +99,7 @@ von `Mdex.Core`/`Mdex.Mcp.Tools` ein. Dieses Delta-Review prüft nur die geände
 - **Alle Phase-2-Befunde tragen über** (nur umbenannt): D-1 ist durch das Containment in
   `Mdex.Core` (von beiden Hosts geteilt) erfüllt; D-2 gilt jetzt für `Mdex.Mcp.Tools`;
   D-3/D-6/D-7/D-8 sind Gateway-only & unverändert; D-4 wandert in den Tool-Layer
-  (kein `RunToJson`-Boundary mehr); D-5 ist durch den Phase-1-Fix gedeckt.
+  (kein Envelope-Reparse-Boundary mehr); D-5 ist durch den Phase-1-Fix gedeckt.
 - **Neu, alle LOW/INFO — kein neuer HIGH:** N-1 (lokaler Gegner = prompt-injizierter
   Caller, nicht Netz; akzeptiert), N-2 (Core-Extraktion = Regressionsrisiko),
   N-3 (Guard-Test auf geteilter Lib + lokaler Flag-Pfad), N-4 (Remote-Creds-Hygiene).
@@ -108,7 +108,7 @@ von `Mdex.Core`/`Mdex.Mcp.Tools` ein. Dieses Delta-Review prüft nur die geände
 
 ### Security-Gates für den neuen Implementierungsplan (pro Phase)
 
-Der phasige Plan (ersetzt `2026-06-04-mdex-mcp-plan.md`) trägt diese als Akzeptanzkriterien:
+Der phasige Implementierungsplan trägt diese als Akzeptanzkriterien:
 
 | Plan-Phase | Security-Gate |
 |---|---|
@@ -116,7 +116,7 @@ Der phasige Plan (ersetzt `2026-06-04-mdex-mcp-plan.md`) trägt diese als Akzept
 | 1 — `Mdex.Mcp.Tools` | `[MinRole]` + CI-Reflection-Guard gegen die geteilte Lib (D-2, N-3) |
 | 2 — `mdex-mcp` (lokal) | Flag fail-closed (kein Default); E2E-Traversal-Test durch die Tools; „`--role read` verweigert Write-Tools" |
 | 3 — `Mdex.Tokens` + `mdex-token` | Perms 0600/0700, atomares Schreiben (D-3/D-6) |
-| 4 — `mdex-gateway` | absorbiert Plan-2-Auth/Hot-Reload; D-4 (Dispatcher-Catch), D-7 (127.0.0.1-Bind) |
+| 4 — `mdex-gateway` | Bearer-Auth + Hot-Reload; D-4 (Tool-Layer-Sanitisierung), D-7 (127.0.0.1-Bind) |
 
 Phase 3 (Code-Check, unten) läuft danach pro Phase / vor Merge gegen **beide** Hosts.
 
@@ -130,7 +130,7 @@ Erst sinnvoll, sobald Code existiert. Setzt Phase 2 voraus (das Threat-Model def
 - [ ] **Path-Traversal End-to-End** — tatsächlicher Durchstich durch PathGuard über die MCP-Tools, nicht nur unit-isoliert. Ein `write-intent`-Token darf den Vault nicht verlassen können.
 - [ ] **Token-Leaks** in Logs / Exceptions / Telemetrie — weder Klartext-Token noch Hashes dürfen in Logausgaben landen.
 - [ ] **Header-Parsing-Edge-Cases** — fehlender/malformter `Authorization`-Header, falsches Schema, leerer Token → sauberes 401, kein Crash, kein Info-Leak.
-- [ ] **Hot-Reload-Robustheit** — Verhalten bei korrupter/halb-geschriebener `tokens.json` (Race während Schreiben durch mcpctl); fällt der Server sicher auf den alten Stand zurück?
+- [ ] **Hot-Reload-Robustheit** — Verhalten bei korrupter/halb-geschriebener `tokens.json` (Race während Schreiben durch `mdex-token`); fällt der Server sicher auf den alten Stand zurück?
 
 **Hilfsmittel:** `security-review`-Skill auf den Branch; `code-review`-Plugin auf den PR; `security-guidance`-Hook ist während der Implementierung ohnehin aktiv. Ggf. `pr-review-toolkit` (silent-failure-hunter) nachinstallieren.
 

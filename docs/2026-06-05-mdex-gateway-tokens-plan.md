@@ -10,8 +10,6 @@
 
 > **Plan C of 3.** Prerequisites: **Plan A** ([core extraction](2026-06-05-mdex-core-extraction-plan.md)) and **Plan B** ([tools + local host](2026-06-05-mdex-mcp-local-host-plan.md)) have landed. From Plan B this plan reuses, unchanged: `Mdex.Core.Security` (`Role`, `Roles`, `IRoleProvider`, `ToolAuthorizer`, `MdexToolException`), `Mdex.Mcp.Tools` (the 19 `[McpServerTool]` wrappers + `MdexBackend` with its D-4 sanitisation), and the `[MinRole]` default-deny reflection guard (already enforced against the shared lib — **not** repeated here).
 
-> **What changed vs. the superseded Plan-2** ([2026-06-04-mdex-mcp-plan.md](2026-06-04-mdex-mcp-plan.md), source material): names (`mdex-mcpctl`→`mdex-token`, the remote `mdex-mcp`→`mdex-gateway`); `Role` moved from `Mdex.Tokens` into `Mdex.Core.Security`; the old ASP.NET-coupled `ToolAuthorizer` is replaced by the Core `ToolAuthorizer` + a gateway `HttpRoleProvider`; tools are referenced from `Mdex.Mcp.Tools`, not redefined; the `CliDispatcher.RunToJson` envelope is gone (the gateway uses `MdexBackend`); token-store path is `~/.config/mdex-gateway/tokens.json`.
-
 ---
 
 ## Conventions for every task
@@ -23,7 +21,7 @@
 
 > **Security gates carried by this plan (Phase-2-Delta + Phase-3, see [security plan](2026-06-05-mdex-security-review-plan.md)):**
 > - **Plan-phase 3 (`Mdex.Tokens`):** `0600`/`0700` perms + atomic write (D-3/D-6) — **Task 3**; fixed-time hash compare (Phase-3 constant-time) — **Task 3**.
-> - **Plan-phase 4 (`mdex-gateway`):** absorbs Plan-2 auth + hot-reload; D-4 is inherited from `MdexBackend` (Plan B); D-7 (`127.0.0.1`-only bind behind TLS proxy) — **Task 9**.
+> - **Plan-phase 4 (`mdex-gateway`):** Bearer-Auth + Hot-Reload; D-4 is inherited from `MdexBackend` (Plan B); D-7 (`127.0.0.1`-only bind behind TLS proxy) — **Task 9**.
 > - **Phase-3 code-check:** header-parsing edge-cases + corrupt-file hot-reload fail-closed → `401` — **Task 10**; no token in logs — **Task 8**; path-traversal through the tools — inherited from Plan B Task 7 (shared tools).
 
 > **MCP SDK soft-spots (verify against the installed package):** `WithHttpTransport`'s `EnableLegacySse` option name, and the path `MapMcp()` maps to (`/` by default). Both flagged inline with fallbacks.
@@ -1139,8 +1137,6 @@ git -C $REPO commit -m "test(gateway): auth gate, header edge-cases, corrupt-fil
 **Files:**
 - Create: `deploy/mdex-gateway.service`
 - Modify: `README.md`
-- Modify: `docs/2026-06-04-mdex-mcp-design.md` (append a pointer that this plan landed the gateway form)
-
 - [ ] **Step 1: systemd unit** — `deploy/mdex-gateway.service`:
 
 ```ini
@@ -1195,23 +1191,9 @@ Only the SHA-256 hash is stored; the raw token is shown once. The gateway watche
 file and picks up changes within ~1s — no restart needed.
 ````
 
-- [ ] **Step 3: Pointer on the superseded Plan-2 design** — append to `docs/2026-06-04-mdex-mcp-design.md`:
+- [ ] **Step 3: Full solution test run** — Run: `dotnet test "$REPO\Mdex.sln"` → Expected: **all projects green** (Plans A + B + C).
 
-```markdown
-
----
-
-## Status (2026-06-05): superseded form implemented as `mdex-gateway`
-
-The remote server this doc described as `mdex-mcp` was renamed `mdex-gateway` and built per
-[2026-06-05-mdex-gateway-tokens-plan.md](2026-06-05-mdex-gateway-tokens-plan.md) (Plan C). The
-in-process backend and three-role ladder are in effect; tools are shared with the local host
-via `Mdex.Mcp.Tools`. Source of truth is the code + `mdex-token --help` + README.
-```
-
-- [ ] **Step 4: Full solution test run** — Run: `dotnet test "$REPO\Mdex.sln"` → Expected: **all projects green** (Plans A + B + C).
-
-- [ ] **Step 5: Commit**
+- [ ] **Step 4: Commit**
 
 ```powershell
 $REPO = "C:\Users\MichaelDiesen\repos\mdex-tooling"
@@ -1235,11 +1217,10 @@ git -C $REPO commit -m "docs: deploy unit + document mdex-gateway + mdex-token"
 ## Self-Review (against the design + security plan)
 
 - **§2 (B2 sibling host, no bridge):** gateway hosts the **same** `Mdex.Mcp.Tools` over HTTP via `MapMcp`; no proxy to the stdio host. ✔
-- **§3 (in-process Data object):** gateway uses the shared `MdexBackend` (Plan B) — no `RunToJson` envelope. ✔
+- **§3 (in-process Data object):** gateway uses the shared `MdexBackend` (Plan B) — returns Data object directly. ✔
 - **§4 (role source = token, per request):** `BearerAuthHandler` → claim → `HttpRoleProvider` (scoped) → shared `ToolAuthorizer`. The ladder itself is reused from `Mdex.Core.Security`, not redefined. ✔
-- **§6 (inherited from Plan 2):** token store (hashes only, `mdex_<base64url(32B)>`, atomic, `0600`/`0700`), auth + hot-reload, token admin, both transports, `~/.config/mdex-gateway/tokens.json`. ✔
+- **§6 (remote-stack features):** token store (hashes only, `mdex_<base64url(32B)>`, atomic, `0600`/`0700`), auth + hot-reload, token admin, both transports, `~/.config/mdex-gateway/tokens.json`. ✔
 - **§8 / security gates:** D-3/D-6 (Task 3), D-7 (Task 9), D-4 inherited (Plan B `MdexBackend`); Phase-3 — constant-time (Task 3), header edge-cases + corrupt-file fail-closed (Task 10), no-token-logging (Task 8), path-traversal through tools (inherited, Plan B Task 7). ✔
-- **Deviations from Plan-2 (intentional, all named):** `Role` in Core not Tokens; ASP.NET-free `ToolAuthorizer` + gateway `HttpRoleProvider`; tools referenced from the shared lib; `mdex-mcpctl`→`mdex-token`, remote `mdex-mcp`→`mdex-gateway`; token path under `mdex-gateway`. ✔
 - **Type consistency:** `TokenEntry(Hash, Role, Label, Created)`; `TokenStore.FindRole(raw) → Role?`; `TokenAdmin.New(Role, label) → string`; `HttpRoleProvider.RoleClaim = "mdex-role"` used by both auth pieces; `BearerAuthHandler.SchemeName = "Bearer"`. Consistent across Tasks 1–11. ✔
 - **Placeholder scan:** none — exact files, code, commands throughout; SDK uncertainties carry concrete fallbacks.
 - **Out of scope (correct, reversible nachrüst-Pfade per design):** OAuth metadata, Infisical, token expiry (D-8 accepted tradeoff), `sync` tool, bootstrapper. After Plan C: run the security-plan **Phase-3 code review** (`security-review` skill on the branch, `code-review` on the PR) against both hosts.

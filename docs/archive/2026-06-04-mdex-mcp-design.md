@@ -1,7 +1,7 @@
 # Design: mdex-mcp & mdex-mcpctl – Remote-MCP-Server + Token-Admin (Plan 2)
 
 > ⚠️ **ABGELÖST (2026-06-05)** durch
-> [2026-06-05-mdex-mcp-local-remote-design.md](2026-06-05-mdex-mcp-local-remote-design.md):
+> [2026-06-05-mdex-mcp-local-remote-design.md](../2026-06-05-mdex-mcp-local-remote-design.md):
 > lokal + remote, 4-Binary-Familie (umbenannt — dieses `mdex-mcp` heißt jetzt
 > `mdex-gateway`), B2 ohne Bridge, `Data`-Objekt statt Envelope-Parse. Inhalte hier
 > gelten nur, soweit das Update sie ausdrücklich als „unverändert übernommen" führt.
@@ -9,7 +9,7 @@
 > **Datum:** 2026-06-04
 > **Status:** Abgelöst (historisch)
 > **Kontext:** Brainstorming-Session, baut auf
-> [2026-06-01-mdex-tooling-design.md](2026-06-01-mdex-tooling-design.md) (Gesamtdesign)
+> [2026-06-01-mdex-tooling-design.md](../2026-06-01-mdex-tooling-design.md) (Gesamtdesign)
 > und [2026-06-02-mdext-cli-plan.md](2026-06-02-mdext-cli-plan.md) (Plan 1, CLI – fertig)
 > auf. Dies ist **Plan 2 von 3**.
 
@@ -60,7 +60,7 @@ YAGNI bzw. maximale Treue, das neue Argument trifft jeweils die echte Grenze.
 ## Sicherheits-Annahmen & Threat-Model
 
 > Ergänzt nach dem Security-Design-Review (Phase 2,
-> [2026-06-05-mdex-security-review-plan.md](2026-06-05-mdex-security-review-plan.md)).
+> [2026-06-05-mdex-security-review-plan.md](../2026-06-05-mdex-security-review-plan.md)).
 
 **Voraussetzung (eigener Plan):** Dieser Server setzt voraus, dass die Phase-1-
 Containment-Fixes an `mdext` bereits gelandet sind

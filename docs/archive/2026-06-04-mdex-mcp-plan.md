@@ -1,7 +1,7 @@
 # mdex-mcp & mdex-mcpctl Implementation Plan
 
 > ⚠️ **SUPERSEDED (2026-06-05).** The design changed — see
-> [2026-06-05-mdex-mcp-local-remote-design.md](2026-06-05-mdex-mcp-local-remote-design.md)
+> [2026-06-05-mdex-mcp-local-remote-design.md](../2026-06-05-mdex-mcp-local-remote-design.md)
 > (local + remote, 4-binary family with renames, B2 without a bridge). This plan is
 > built around the single remote server and is **no longer current**; a new
 > implementation plan will replace it. Do **not** execute this plan as-is.
