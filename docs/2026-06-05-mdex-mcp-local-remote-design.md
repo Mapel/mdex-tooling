@@ -275,6 +275,67 @@ Vertrag, den der MCP konsumiert" entfällt.
 
 ---
 
+## 8. Sicherheit: Threat-Model (lokal + remote) & Phase-2-Delta
+
+> Das ursprüngliche Phase-2-Design-Review
+> ([2026-06-05-mdex-security-review-plan.md](2026-06-05-mdex-security-review-plan.md))
+> prüfte das **abgelöste** Plan-2-Design. Dieser Abschnitt ist das **Delta-Review** auf
+> die neue Form (zwei Hosts, Core-Extraktion) und konsolidiert das Threat-Model.
+
+### Threat-Model je Host
+
+**Remote (`mdex-gateway`)** — unverändert aus Plan-2: internet-exponiert via
+TLS-Reverse-Proxy, Kestrel loopback-only. Angreifer: (a) Netzwerk-Client ohne/mit
+geratenem Token → `401`; (b) bösartiger AI-Client *mit* gültigem Token, der seine Rolle
+übersteigen oder den Vault verlassen will → Rollen-Leiter + Containment.
+
+**Lokal (`mdex-mcp`)** — neue Fläche, *anderes* Modell: **kein Netz-Listener** (stdio,
+vom Client gespawnt), Vertrauensgrenze = der OS-Nutzer. „Aus dem Vault ausbrechen" ist
+für den Operator kein Angriff (er hat ohnehin Shell-Zugriff). Der reale Gegner ist ein
+**prompt-injizierter / verwirrter AI-Caller** (z.B. durch bösartigen Notiz-/Repo-Inhalt):
+
+- **Containment** (geteiltes `Mdex.Core`) hält ihn *im* Vault → kein Ausbruch.
+- **Rollen-Flag** (fail-closed, kein Default) staffelt die Sprengkraft: mit `read` /
+  `write-intent` kann selbst ein gekaperter Caller nicht `delete`/`move`/überschreiben.
+- **Git** macht jede Mutation reversibel.
+
+Der lokale Host hat damit **weniger** Angriffsfläche als der Gateway: keine Netz-Fläche,
+keine Secrets-at-rest (kein Token), kein Bind-Risiko (D-7 n/a).
+
+### Befunde-Remap (Phase 2 → neues Design)
+
+| Phase-2-Befund | im neuen Design |
+|---|---|
+| D-1 (Ladder ruht auf Containment) | **erfüllt** — Containment in `Mdex.Core`, von beiden Hosts geteilt |
+| D-2 (default-deny / Guard-Test) | gilt jetzt für `Mdex.Mcp.Tools` (beide Hosts) |
+| D-3 / D-6 (tokens.json Perms / atomar) | Gateway-only, unverändert (Pfad → `~/.config/mdex-gateway/`) |
+| D-4 (Stacktrace-Leak) | **verschoben** in den Tool-Layer (kein `RunToJson`-Boundary mehr, §3) |
+| D-5 (Root-Wipe `delete ""`) | durch Phase-1-Fix in `Mdex.Core` gedeckt |
+| D-7 (TLS/Bind) | Gateway-only, unverändert; lokal n/a (kein Listener) |
+| D-8 (keine Token-Expiry) | unveränderter Tradeoff |
+
+### Neue Befunde aus dem Delta
+
+| # | Sev | Befund | Konsequenz |
+|---|-----|--------|-----------|
+| N-1 | ℹ️ INFO | Lokaler Gegner = prompt-injizierter Caller, nicht Netz | bewusst akzeptiert; Verteidigung Flag + Containment + Git (s.o.) |
+| N-2 | 🟡 LOW | Core-Extraktion könnte den einzigen PathGuard-Chokepoint / die Phase-1-Fixes regressieren | Extraktions-Phase: Containment-Tests wandern mit, bleiben grün (Gate); einziger Chokepoint erhalten |
+| N-3 | 🟡 LOW | `[MinRole]`/Guard-Test muss auf geteiltem `Mdex.Mcp.Tools` laufen; lokaler Flag-Pfad ungetestet | Guard-Test gegen die geteilte Lib; Test „`--role read` verweigert Write-Tools" |
+| N-4 | 🟡 LOW | Remote-Bearer-Token in lokaler Agent-Config = unnötige Creds auf der Dev-Maschine | Topologie-Regel (§5) hat Creds-Hygiene-Dimension: Remote-Token **nie** lokal konfigurieren |
+
+**Fazit des Delta:** **Kein neuer HIGH.** Die neue Form erbt Containment + Rollen-Leiter
+aus `Mdex.Core`; der lokale Host bringt *weniger* Fläche mit, nicht mehr. Die Arbeit liegt
+in Regressions-Schutz (N-2) und dem Verschieben zweier bestehender Anforderungen (D-2/D-4)
+auf die geteilte Tool-Lib.
+
+### Positiv-Befunde (übernommen)
+
+In-Process = keine Shell = keine Command-Injection; Vault-Root serverseitig gepinnt (kein
+`--root`-Inject); nur Hashes gespeichert; Hot-Reload fällt sicher (korrupte Datei → leerer
+Store → `401`); Auth-Fehler loggen den Token nicht.
+
+---
+
 ## Designprinzipien-Bezug
 
 - **Ein Tool, ein Zweck:** vier klar abgegrenzte Binaries; `Mdex.Core` als einzige

@@ -83,6 +83,45 @@ Review von Spec (`2026-06-04-mdex-mcp-design.md`) + Plan (`2026-06-04-mdex-mcp-p
 
 ---
 
+## Phase 2-Delta — Re-Check nach Design-Änderung  *(abgeschlossen 2026-06-05)*
+
+Phase 2 (oben) prüfte das **abgelöste** Plan-2-Design (remote-only). Das neue Design
+([2026-06-05-mdex-mcp-local-remote-design.md](2026-06-05-mdex-mcp-local-remote-design.md))
+führt **lokal + remote**, eine **4-Binary-Familie** (umbenannt: altes `mdex-mcp` =
+remote = jetzt `mdex-gateway`; neues `mdex-mcp` = lokaler stdio-Host) und die Extraktion
+von `Mdex.Core`/`Mdex.Mcp.Tools` ein. Dieses Delta-Review prüft nur die geänderte Fläche.
+
+- [x] Threat-Model je Host (lokal stdio vs. remote HTTP) · Befunde-Remap D-1…D-8 ·
+  neue Fläche (lokaler Host, Core-Extraktion, geteilte Tool-Lib).
+
+**Voller Befund + konsolidiertes Threat-Model:** §8 des neuen Spec. Kurzfassung:
+
+- **Alle Phase-2-Befunde tragen über** (nur umbenannt): D-1 ist durch das Containment in
+  `Mdex.Core` (von beiden Hosts geteilt) erfüllt; D-2 gilt jetzt für `Mdex.Mcp.Tools`;
+  D-3/D-6/D-7/D-8 sind Gateway-only & unverändert; D-4 wandert in den Tool-Layer
+  (kein `RunToJson`-Boundary mehr); D-5 ist durch den Phase-1-Fix gedeckt.
+- **Neu, alle LOW/INFO — kein neuer HIGH:** N-1 (lokaler Gegner = prompt-injizierter
+  Caller, nicht Netz; akzeptiert), N-2 (Core-Extraktion = Regressionsrisiko),
+  N-3 (Guard-Test auf geteilter Lib + lokaler Flag-Pfad), N-4 (Remote-Creds-Hygiene).
+- **Kernaussage:** Die neue Form erbt Containment + Rollen-Leiter; der lokale Host bringt
+  *weniger* Fläche mit (keine Netz-Fläche, keine Secrets-at-rest, kein Bind-Risiko).
+
+### Security-Gates für den neuen Implementierungsplan (pro Phase)
+
+Der phasige Plan (ersetzt `2026-06-04-mdex-mcp-plan.md`) trägt diese als Akzeptanzkriterien:
+
+| Plan-Phase | Security-Gate |
+|---|---|
+| 0 — `Mdex.Core` extrahieren (Refactor) | Containment-Tests wandern mit, bleiben grün (N-2); einziger PathGuard-Chokepoint erhalten |
+| 1 — `Mdex.Mcp.Tools` | `[MinRole]` + CI-Reflection-Guard gegen die geteilte Lib (D-2, N-3) |
+| 2 — `mdex-mcp` (lokal) | Flag fail-closed (kein Default); E2E-Traversal-Test durch die Tools; „`--role read` verweigert Write-Tools" |
+| 3 — `Mdex.Tokens` + `mdex-token` | Perms 0600/0700, atomares Schreiben (D-3/D-6) |
+| 4 — `mdex-gateway` | absorbiert Plan-2-Auth/Hot-Reload; D-4 (Dispatcher-Catch), D-7 (127.0.0.1-Bind) |
+
+Phase 3 (Code-Check, unten) läuft danach pro Phase / vor Merge gegen **beide** Hosts.
+
+---
+
 ## Phase 3 — Security-Code-Check von mdex-mcp  *(später, wenn implementiert)*
 
 Erst sinnvoll, sobald Code existiert. Setzt Phase 2 voraus (das Threat-Model definiert, wogegen geprüft wird).
@@ -99,5 +138,7 @@ Erst sinnvoll, sobald Code existiert. Setzt Phase 2 voraus (das Threat-Model def
 
 ## Reihenfolge
 
-1. **Phase 1 + 2 jetzt** — Fundament validieren + Design härten, bevor Implementierung beginnt.
-2. **Phase 3 später** — nach Implementierung von `mdex-mcp`, vor dem Merge.
+1. **Phase 1 + 2** — Fundament validiert + altes Design gehärtet. *(abgeschlossen)*
+2. **Phase 2-Delta** — Re-Check nach der Design-Änderung (lokal + remote, 4 Binaries);
+   Gates pro Plan-Phase definiert. *(abgeschlossen)*
+3. **Phase 3 später** — nach Implementierung, pro Phase / vor Merge, gegen beide Hosts.
