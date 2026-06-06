@@ -1,0 +1,29 @@
+using Mdex.Core.Cli;
+
+namespace Mdex.Core.Commands.Read;
+
+public sealed class ReadNoteCommand : ICommand
+{
+    public string Name => "read-note";
+    public string Usage => "read-note <slug|path>";
+    public string Summary => "Print a note's frontmatter and body.";
+
+    public CommandResult Run(string[] args, CliContext ctx)
+    {
+        var reader = new ArgReader(args);
+        var key = reader.Positional(0) ?? throw new CommandException("read-note needs a slug or path");
+        var note = Resolver.Single(ctx, key, $"note not found: {key}");
+
+        var data = new
+        {
+            path = note.RelativePath, slug = note.Slug, title = note.Title,
+            frontmatter = new
+            {
+                type = note.Frontmatter.Type, created = note.Frontmatter.Created,
+                modified = note.Frontmatter.Modified, tags = note.Frontmatter.Tags,
+            },
+            body = note.Body,
+        };
+        return CommandResult.Of(data, note.Body);
+    }
+}

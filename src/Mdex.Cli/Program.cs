@@ -1,6 +1,6 @@
-using Mdex.Cli.Cli;
-using Mdex.Cli.Commands;
-using Mdex.Cli.Vault;
+using Mdex.Core.Cli;
+using Mdex.Core.Commands;
+using Mdex.Core.Vault;
 
 var registry = CommandFactory.BuildRegistry();
 
@@ -15,9 +15,9 @@ if (args.Length == 0 || args[0] is "--help" or "-h" or "help")
 
     static string GroupOf(ICommand c) => c.GetType().Namespace switch
     {
-        "Mdex.Cli.Commands.Read" => "Read",
-        "Mdex.Cli.Commands.Write" => "Write",
-        "Mdex.Cli.Commands.Fs" => "Raw FS (guarded to vault root)",
+        "Mdex.Core.Commands.Read" => "Read",
+        "Mdex.Core.Commands.Write" => "Write",
+        "Mdex.Core.Commands.Fs" => "Raw FS (guarded to vault root)",
         _ => "Meta",
     };
 

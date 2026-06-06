@@ -12,6 +12,6 @@
     <Version>0.1.0</Version>
   </PropertyGroup>
   <ItemGroup>
-    <PackageReference Include="YamlDotNet" Version="18.*" />
+    <ProjectReference Include="..\Mdex.Core\Mdex.Core.csproj" />
   </ItemGroup>
 </Project>
