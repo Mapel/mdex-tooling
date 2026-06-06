@@ -45,7 +45,7 @@ public sealed class VersionCommand : ICommand
 {
     public string Name => "version";
     public bool NeedsVault => false;
-    public string Summary => "Print the mdext version.";
+    public string Summary => "Print the mdex-cli version.";
     public CommandResult Run(string[] args, CliContext ctx)
-        => CommandResult.Of(new { version = "0.1.0" }, "mdext 0.1.0");
+        => CommandResult.Of(new { version = "0.1.0" }, "mdex-cli 0.1.0");
 }

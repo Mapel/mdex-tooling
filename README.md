@@ -5,11 +5,11 @@ Vault-only tooling for the **mdex** LifeOS. This repo holds three binaries
 
 | Binary       | .NET project   | Status            |
 |--------------|----------------|-------------------|
-| `mdext`      | `Mdex.Cli`     | this plan         |
+| `mdex-cli`      | `Mdex.Cli`     | this plan         |
 | `mdex-mcp`   | `Mdex.Mcp`     | later plan        |
 | `mdex-mcpctl`| `Mdex.Mcpctl`  | later plan        |
 
-## `mdext` — the content CLI
+## `mdex-cli` — the content CLI
 
 Two output modes: human-readable, or `--json` (the stable contract the MCP
 server consumes).
@@ -28,14 +28,14 @@ dotnet tool install --global --add-source ./nupkg Mdex.Cli
 Then point it at the vault (resolution order: `--root` > `MDEX_ROOT` > config):
 ```bash
 export MDEX_ROOT="/path/to/mdex"   # your vault root
-mdext list-tags
-mdext search "emergenz" --json
+mdex-cli list-tags
+mdex-cli search "emergenz" --json
 ```
 Update: `dotnet tool update --global --add-source ./nupkg Mdex.Cli`
 
 ### Commands
 
-`mdext --help` prints this same reference. Every command also accepts the two
+`mdex-cli --help` prints this same reference. Every command also accepts the two
 **global flags**:
 
 | Flag | Meaning |

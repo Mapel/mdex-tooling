@@ -5,9 +5,9 @@
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
     <RootNamespace>Mdex.Cli</RootNamespace>
-    <AssemblyName>mdext</AssemblyName>
+    <AssemblyName>mdex-cli</AssemblyName>
     <PackAsTool>true</PackAsTool>
-    <ToolCommandName>mdext</ToolCommandName>
+    <ToolCommandName>mdex-cli</ToolCommandName>
     <PackageId>Mdex.Cli</PackageId>
     <Version>0.1.0</Version>
   </PropertyGroup>
