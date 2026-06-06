@@ -1,13 +1,17 @@
 # mdex-tooling
 
-Vault-only tooling for the **mdex** LifeOS. This repo holds three binaries
-(spec: `projects/mdex-tooling-konzept/2026-06-01-mdex-tooling-design.md` in the vault):
+Vault-only tooling for the **mdex** LifeOS — a local+remote MCP family over one
+shared core (design: [`docs/2026-06-05-mdex-mcp-local-remote-design.md`](docs/2026-06-05-mdex-mcp-local-remote-design.md)):
 
-| Binary       | .NET project   | Status            |
-|--------------|----------------|-------------------|
-| `mdex-cli`      | `Mdex.Cli`     | this plan         |
-| `mdex-mcp`   | `Mdex.Mcp`     | later plan        |
-| `mdex-mcpctl`| `Mdex.Mcpctl`  | later plan        |
+| Binary          | .NET project    | Where  | Status   |
+|-----------------|-----------------|--------|----------|
+| `mdex-cli`      | `Mdex.Cli`      | local  | built    |
+| `mdex-mcp`      | `Mdex.Mcp`      | local  | built    |
+| `mdex-gateway`  | `Mdex.Gateway`  | server | planned  |
+| `mdex-token`    | `Mdex.Token`    | server | planned  |
+
+All four are thin hosts over `Mdex.Core` (the single operations source); the two
+MCP hosts share the same tool surface (`Mdex.Mcp.Tools`).
 
 ## `mdex-cli` — the content CLI
 
@@ -91,6 +95,31 @@ from `--content <text>` or piped stdin.
 
 All paths are jailed to the vault root. The CLI never touches git — the vault's
 `mdex-autocommit.sh` is the only committer.
+
+## mdex-mcp (local MCP server)
+
+`mdex-mcp` exposes the mdex operations as MCP tools over **stdio** for AI agents that run
+on this machine against the **local checkout** (Claude Code, Cowork, Codex CLI). It calls
+`Mdex.Core` in-process — no network, no token, no ASP.NET — and stages every tool by role.
+
+**Roles (ladder, fail-closed — you must pass `--role`):** `read` ⊂ `write-intent` ⊂ `fullwrite`
+- `read` — the 9 retrieval tools.
+- `write-intent` — adds the 5 intent tools (capture/create/append/promote; non-destructive).
+- `fullwrite` — adds the 5 raw-fs tools (write/append/move/mkdir/delete).
+
+There is **no default role**: launching without `--role` is an error, so you always choose
+consciously what the AI may do to the local vault.
+
+```
+mdex-mcp --role <read|write-intent|fullwrite> [--root <vault>]
+```
+
+The vault root resolves from `--root`, else `$MDEX_ROOT`, else config.
+
+**Client wiring (local only):** register `mdex-mcp` in the agent's local config against the
+checkout it works in; do **not** register the remote (`mdex-gateway`) there. See
+`docs/examples/mcp.json` and the topology rules in
+[the design](docs/2026-06-05-mdex-mcp-local-remote-design.md) §5.
 
 ## Development
 

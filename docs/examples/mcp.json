@@ -1,0 +1,8 @@
+{
+  "mcpServers": {
+    "mdex": {
+      "command": "mdex-mcp",
+      "args": ["--role", "write-intent", "--root", "/home/you/repos/mdex"]
+    }
+  }
+}
