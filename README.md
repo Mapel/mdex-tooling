@@ -7,8 +7,8 @@ shared core (design: [`docs/2026-06-05-mdex-mcp-local-remote-design.md`](docs/20
 |-----------------|-----------------|--------|----------|
 | `mdex-cli`      | `Mdex.Cli`      | local  | built    |
 | `mdex-mcp`      | `Mdex.Mcp`      | local  | built    |
-| `mdex-gateway`  | `Mdex.Gateway`  | server | planned  |
-| `mdex-token`    | `Mdex.Token`    | server | planned  |
+| `mdex-gateway`  | `Mdex.Gateway`  | server | built    |
+| `mdex-token`    | `Mdex.Token`    | server | built    |
 
 All four are thin hosts over `Mdex.Core` (the single operations source); the two
 MCP hosts share the same tool surface (`Mdex.Mcp.Tools`).
@@ -120,6 +120,35 @@ The vault root resolves from `--root`, else `$MDEX_ROOT`, else config.
 checkout it works in; do **not** register the remote (`mdex-gateway`) there. See
 `docs/examples/mcp.json` and the topology rules in
 [the design](docs/2026-06-05-mdex-mcp-local-remote-design.md) §5.
+
+## mdex-gateway (remote MCP server)
+
+`mdex-gateway` exposes the **same** mdex tools as `mdex-mcp`, but over HTTP for off-machine
+clients (phone, web, Langdock). It hosts `Mdex.Mcp.Tools` in-process and gates every tool by
+the role carried by the caller's bearer token. It is the **sibling** of the local stdio host —
+same tools, different transport (design §2).
+
+**Roles (ladder):** `read` ⊂ `write-intent` ⊂ `fullwrite` (9 read / +5 intent / +5 raw-fs tools).
+**Transport:** Streamable HTTP (default) + legacy SSE.
+**Config:** `MDEX_ROOT` (vault), `Mdex:TokenStore` or `MDEX_GATEWAY_TOKENS`
+(default `~/.config/mdex-gateway/tokens.json`), Kestrel URL in `appsettings.json`.
+Run behind a TLS reverse proxy; the server binds `127.0.0.1` only — never a public interface
+without the proxy (a bearer token over plain HTTP would be in clear text).
+
+**Credential hygiene (N-4):** configure the gateway's bearer token **only** in off-machine
+clients. On a machine with a local checkout, use `mdex-mcp` (local) — never put the remote
+token in a local agent config.
+
+## mdex-token (token admin)
+
+```
+mdex-token new --role <read|write-intent|fullwrite> --label <name>
+mdex-token list
+mdex-token revoke <label>
+```
+
+Only the SHA-256 hash is stored; the raw token is shown once. The gateway watches the token
+file and picks up changes within ~1s — no restart needed.
 
 ## Development
 
