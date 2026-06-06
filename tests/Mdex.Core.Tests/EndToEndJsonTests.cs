@@ -4,8 +4,17 @@ namespace Mdex.Core.Tests;
 
 public class EndToEndJsonTests
 {
-    static string CliDir() =>
-        Path.GetFullPath(Path.Combine(AppContext.BaseDirectory, "..", "..", "..", "..", "..", "src", "Mdex.Cli"));
+    // Walk up from the test output dir to the repo root (the folder holding Mdex.sln),
+    // then point at the exe project. Robust to build-output depth — no magic "../.." count.
+    static string CliDir()
+    {
+        var dir = AppContext.BaseDirectory;
+        while (dir is not null && !File.Exists(Path.Combine(dir, "Mdex.sln")))
+            dir = Path.GetDirectoryName(dir);
+        if (dir is null)
+            throw new InvalidOperationException("Could not locate Mdex.sln above the test output directory.");
+        return Path.Combine(dir, "src", "Mdex.Cli");
+    }
 
     [Fact]
     public void List_tags_json_envelope_is_valid()
