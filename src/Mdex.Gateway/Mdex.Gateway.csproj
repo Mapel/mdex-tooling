@@ -1,0 +1,20 @@
+<Project Sdk="Microsoft.NET.Sdk.Web">
+
+  <ItemGroup>
+    <ProjectReference Include="..\Mdex.Mcp.Tools\Mdex.Mcp.Tools.csproj" />
+    <ProjectReference Include="..\Mdex.Tokens\Mdex.Tokens.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="ModelContextProtocol.AspNetCore" Version="1.4.0" />
+  </ItemGroup>
+
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <RootNamespace>Mdex.Gateway</RootNamespace>
+    <AssemblyName>mdex-gateway</AssemblyName>
+  </PropertyGroup>
+
+</Project>
