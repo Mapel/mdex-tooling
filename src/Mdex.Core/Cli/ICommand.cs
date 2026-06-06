@@ -18,7 +18,6 @@ public sealed record CommandResult(object? Data, string HumanText)
 public sealed class CliContext
 {
     public required string VaultRoot { get; init; }
-    public required bool Json { get; init; }
     public required NoteRepository Repo { get; init; }
     public required PathGuard Guard { get; init; }
     public required TemplateService Templates { get; init; }

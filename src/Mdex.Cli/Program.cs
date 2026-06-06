@@ -1,16 +1,14 @@
 using Mdex.Core.Cli;
-using Mdex.Core.Commands;
-using Mdex.Core.Vault;
 
-var registry = CommandFactory.BuildRegistry();
+var engine = CommandEngine.Default();
 
 if (args.Length == 0 || args[0] is "--help" or "-h" or "help")
 {
-    Console.WriteLine("mdext <command> [args] [--root <path>] [--json]");
+    Console.WriteLine("mdex-cli <command> [args] [--root <path>] [--json]");
     Console.WriteLine();
     Console.WriteLine("Global flags:");
     Console.WriteLine("  --root <path>   vault root (else $MDEX_ROOT, else config)");
-    Console.WriteLine("  --json          emit the stable JSON envelope instead of human text");
+    Console.WriteLine("  --json          emit the JSON envelope instead of human text");
     Console.WriteLine();
 
     static string GroupOf(ICommand c) => c.GetType().Namespace switch
@@ -21,10 +19,8 @@ if (args.Length == 0 || args[0] is "--help" or "-h" or "help")
         _ => "Meta",
     };
 
-    // Align summaries in a column, but cap the width so one long usage line
-    // doesn't push every description off to the right; longer ones wrap instead.
-    var width = Math.Min(registry.All.Max(c => c.Usage.Length), 44);
-    foreach (var group in registry.All.GroupBy(GroupOf))
+    var width = Math.Min(engine.Commands.Max(c => c.Usage.Length), 44);
+    foreach (var group in engine.Commands.GroupBy(GroupOf))
     {
         Console.WriteLine(group.Key + ":");
         foreach (var c in group)
@@ -56,40 +52,9 @@ for (var i = 0; i < rest.Length; i++)
     cleaned.Add(rest[i]);
 }
 
-var command = registry.Get(verb);
-if (command is null)
-{
-    Console.Error.WriteLine(json ? JsonEnvelope.Err(verb, $"unknown command '{verb}'")
-                                  : $"mdext: unknown command '{verb}'");
-    return 1;
-}
-
 try
 {
-    CliContext ctx;
-    if (command.NeedsVault)
-    {
-        var root = VaultResolver.Resolve(rootFlag);
-        var guard = new PathGuard(root);
-        ctx = new CliContext
-        {
-            VaultRoot = root, Json = json,
-            Repo = new NoteRepository(root, guard),
-            Guard = guard,
-            Templates = new TemplateService(root),
-        };
-    }
-    else
-    {
-        // commands that don't touch the vault still get a context shell
-        ctx = new CliContext
-        {
-            VaultRoot = "", Json = json,
-            Repo = null!, Guard = null!, Templates = null!,
-        };
-    }
-
-    var result = command.Run(cleaned.ToArray(), ctx);
+    var result = engine.Run(verb, cleaned.ToArray(), rootFlag);
     Console.WriteLine(json ? JsonEnvelope.Ok(verb, result.Data) : result.HumanText);
     return 0;
 }

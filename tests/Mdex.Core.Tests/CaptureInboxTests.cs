@@ -8,7 +8,7 @@ public class CaptureInboxTests
     static CliContext Ctx(TestVault v)
     {
         var g = new PathGuard(v.Root);
-        return new CliContext { VaultRoot = v.Root, Json = false,
+        return new CliContext { VaultRoot = v.Root,
             Repo = new NoteRepository(v.Root, g), Guard = g, Templates = new TemplateService(v.Root) };
     }
 

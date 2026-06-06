@@ -8,7 +8,7 @@ public class SearchCommandTests
     static CliContext Ctx(TestVault v)
     {
         var guard = new PathGuard(v.Root);
-        return new CliContext { VaultRoot = v.Root, Json = false,
+        return new CliContext { VaultRoot = v.Root,
             Repo = new NoteRepository(v.Root, guard), Guard = guard,
             Templates = new TemplateService(v.Root) };
     }
