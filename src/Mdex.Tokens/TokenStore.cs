@@ -19,7 +19,7 @@ public sealed class TokenStore
     };
 
     readonly string _path;
-    List<TokenEntry> _entries;
+    volatile List<TokenEntry> _entries;   // reassigned by Reload() on the watcher thread, read on request threads
 
     public TokenStore(string path)
     {

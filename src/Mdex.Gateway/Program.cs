@@ -9,9 +9,10 @@ using Microsoft.AspNetCore.Authentication;
 var builder = WebApplication.CreateBuilder(args);
 
 // --- configuration: vault root + token store path (env wins over appsettings) ---
-var vaultRoot = builder.Configuration["Mdex:Root"]
-    ?? Environment.GetEnvironmentVariable("MDEX_ROOT")
-    ?? throw new InvalidOperationException("Set Mdex:Root in config or MDEX_ROOT env var.");
+var vaultRoot = builder.Configuration["Mdex:Root"];
+if (string.IsNullOrWhiteSpace(vaultRoot)) vaultRoot = Environment.GetEnvironmentVariable("MDEX_ROOT");
+if (string.IsNullOrWhiteSpace(vaultRoot))
+    throw new InvalidOperationException("Set Mdex:Root in config or MDEX_ROOT env var.");
 var tokenPath = builder.Configuration["Mdex:TokenStore"];
 if (string.IsNullOrWhiteSpace(tokenPath)) tokenPath = TokenPaths.Default();
 
