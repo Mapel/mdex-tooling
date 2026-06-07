@@ -122,15 +122,25 @@ Phase 3 (Code-Check, unten) läuft danach pro Phase / vor Merge gegen **beide** 
 
 ---
 
-## Phase 3 — Security-Code-Check von mdex-mcp  *(später, wenn implementiert)*
+## Phase 3 — Security-Code-Check von mdex-mcp  *(abgeschlossen 2026-06-07)*
 
 Erst sinnvoll, sobald Code existiert. Setzt Phase 2 voraus (das Threat-Model definiert, wogegen geprüft wird).
 
-- [ ] **Constant-Time-Vergleich** im `BearerAuthHandler` — Token-Hash-Vergleich timing-safe (gegen Timing-Attacken). Kein naives `==` auf Strings.
-- [ ] **Path-Traversal End-to-End** — tatsächlicher Durchstich durch PathGuard über die MCP-Tools, nicht nur unit-isoliert. Ein `write-intent`-Token darf den Vault nicht verlassen können.
-- [ ] **Token-Leaks** in Logs / Exceptions / Telemetrie — weder Klartext-Token noch Hashes dürfen in Logausgaben landen.
-- [ ] **Header-Parsing-Edge-Cases** — fehlender/malformter `Authorization`-Header, falsches Schema, leerer Token → sauberes 401, kein Crash, kein Info-Leak.
-- [ ] **Hot-Reload-Robustheit** — Verhalten bei korrupter/halb-geschriebener `tokens.json` (Race während Schreiben durch `mdex-token`); fällt der Server sicher auf den alten Stand zurück?
+- [x] **Constant-Time-Vergleich** im Auth-Pfad — `TokenStore.FindRole` hasht zuerst, vergleicht via `CryptographicOperations.FixedTimeEquals`.
+- [x] **Path-Traversal End-to-End** — Containment in `Mdex.Core` (phase-1-Fix), serverseitig gepinnter Root; AI kann kein `--root` injizieren. Phase 3 fügt keinen Pfad-Code hinzu.
+- [x] **Token-Leaks** — `BearerAuthHandler` gibt nur Gründe zurück, nie den Token; nur Hashes persistiert; `MdexBackend` sanitisiert Exceptions (D-4).
+- [x] **Header-Parsing-Edge-Cases** — `AuthIntegrationTests` (kein Header, leerer Token, falsches Schema, kein Prefix, unbekannt → 401).
+- [x] **Hot-Reload-Robustheit** — korrupte Datei → leerer Store → fail-closed; atomares Schreiben; `Corrupt_token_file_fails_closed_401`.
+
+**Voller Befund:** [`2026-06-07-phase-3-security-review.md`](2026-06-07-phase-3-security-review.md).
+Kein neuer HIGH/MED-Vuln. Ein LOW/Defense-in-Depth-Punkt umgesetzt: **SEC-1** — der Default-Deny-Guard
+prüfte nur *Deklaration* (`[MinRole]` + `ToolAuthorizer`-Param), nicht *Durchsetzung*; D-2 war damit
+formal nicht erfüllt. Neuer behavioraler Guard (`ToolGateGuardTests.Every_above_floor_tool_refuses_the_next_lower_role`)
+ruft jedes Above-Floor-Tool mit der nächst-niedrigeren Rolle auf und verlangt die Refusal des Authorizers
+(mutationsgetestet: schlägt fehl, wenn ein Tool `Require` vergisst). **SEC-2** (Legacy-SSE aktiv) als
+bewusster Verfügbarkeits-Tradeoff dokumentiert — Auth gilt weiterhin, DoS-Klasse außerhalb des Scopes.
+
+> **Status (2026-06-07):** Phase-3-Code-Review + Security-Review abgeschlossen. 138 Tests grün, Build 0 Fehler.
 
 **Hilfsmittel:** `security-review`-Skill auf den Branch; `code-review`-Plugin auf den PR; `security-guidance`-Hook ist während der Implementierung ohnehin aktiv. Ggf. `pr-review-toolkit` (silent-failure-hunter) nachinstallieren.
 
