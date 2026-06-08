@@ -24,15 +24,11 @@ public class AuthIntegrationTests : IDisposable
         try { File.Delete(_tokens); } catch { }
     }
 
-    static string TempOAuthDb() =>
-        Path.Combine(Path.GetTempPath(), "mdex-gw-oauth-" + Guid.NewGuid().ToString("N") + ".db");
-
     WebApplicationFactory<Program> Factory(string? tokensOverride = null) =>
         new WebApplicationFactory<Program>().WithWebHostBuilder(b =>
         {
             b.UseSetting("Mdex:Root", _root);
             b.UseSetting("Mdex:TokenStore", tokensOverride ?? _tokens);
-            b.UseSetting("Mdex:OAuthDb", TempOAuthDb());
         });
 
     static HttpRequestMessage McpPost(string? rawAuthHeader)

@@ -5,7 +5,6 @@ using Mdex.Mcp.Tools;
 using Mdex.Mcp.Tools.Tools;
 using Mdex.Tokens;
 using Microsoft.AspNetCore.Authentication;
-using Microsoft.EntityFrameworkCore;
 using OpenIddict.Validation.AspNetCore;
 
 var builder = WebApplication.CreateBuilder(args);
@@ -17,11 +16,6 @@ if (string.IsNullOrWhiteSpace(vaultRoot))
     throw new InvalidOperationException("Set Mdex:Root in config or MDEX_ROOT env var.");
 var tokenPath = builder.Configuration["Mdex:TokenStore"];
 if (string.IsNullOrWhiteSpace(tokenPath)) tokenPath = TokenPaths.Default();
-
-// --- OAuth DB path: resolve relative paths against ContentRoot ---
-var oauthDbPath = builder.Configuration["Mdex:OAuthDb"] ?? "oauth.db";
-if (!Path.IsPathRooted(oauthDbPath))
-    oauthDbPath = Path.Combine(builder.Environment.ContentRootPath, oauthDbPath);
 
 // --- shared singletons: engine, in-process backend (server vault root), token store + watcher ---
 var engine = CommandEngine.Default();
@@ -38,19 +32,14 @@ builder.Services.AddHttpContextAccessor();
 builder.Services.AddScoped<IRoleProvider, HttpRoleProvider>();
 builder.Services.AddScoped<ToolAuthorizer>();
 
-// --- OAuth DB + client seed ---
-builder.Services.AddDbContext<OAuthDb>(o =>
-{
-    o.UseSqlite($"Data Source={oauthDbPath}");
-    o.UseOpenIddict();
-});
+// --- OAuth client seed ---
 builder.Services.Configure<List<OAuthClientConfig>>(
     builder.Configuration.GetSection("Mdex:OAuthClients"));
 builder.Services.AddHostedService<OAuthClientSeed>();
 
 // --- OpenIddict: AS (authorization server) + Validation (resource server) ---
 builder.Services.AddOpenIddict()
-    .AddCore(o => o.UseEntityFrameworkCore().UseDbContext<OAuthDb>())
+    .AddCore(o => o.UseInMemoryStores())   // no DB needed: clients seeded from config, codes/tokens are JWTs
     .AddServer(o =>
     {
         o.SetAuthorizationEndpointUris("/connect/authorize");
@@ -106,12 +95,6 @@ builder.Services.Configure<ModelContextProtocol.Server.McpServerOptions>(o =>
     o.Filters.Request.ListToolsFilters.Add(RoleToolVisibility.ListToolsFilter));
 
 var app = builder.Build();
-
-// Create the OAuth DB schema on first run. Replace with MigrateAsync() once
-// the initial EF migration is generated: dotnet ef migrations add InitOAuth
-// --project src/Mdex.Gateway --context OAuthDb --output-dir Auth/Migrations
-using (var scope = app.Services.CreateScope())
-    await scope.ServiceProvider.GetRequiredService<OAuthDb>().Database.EnsureCreatedAsync();
 
 app.Services.GetRequiredService<TokenStoreWatcher>();   // touch singleton so watching starts at boot
 

@@ -43,8 +43,6 @@ public class OAuthFlowIntegrationTests : IDisposable
         {
             b.UseSetting("Mdex:Root", _root);
             b.UseSetting("Mdex:TokenStore", _tokens);
-            b.UseSetting("Mdex:OAuthDb", Path.Combine(Path.GetTempPath(),
-                "mdex-gw-oauth-" + Guid.NewGuid().ToString("N") + ".db"));
             // Inject a test OAuth client
             b.UseSetting("Mdex:OAuthClients:0:ClientId", TestClientId);
             b.UseSetting("Mdex:OAuthClients:0:ClientSecret", TestClientSecret);
