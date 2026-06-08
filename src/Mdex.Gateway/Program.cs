@@ -57,6 +57,11 @@ builder.Services.AddOpenIddict()
 
         o.RegisterScopes("mdex:read", "mdex:write-intent", "mdex:fullwrite");
 
+        // Greedy MCP clients (claude.ai) request every advertised scope. Don't reject when a client
+        // asks for more than its tier — AuthorizationController clamps the grant to the client's
+        // allowed scopes instead. The seeded per-client scope permissions remain the allow-list.
+        o.IgnoreScopePermissions();
+
         o.UseAspNetCore()
             .EnableAuthorizationEndpointPassthrough();   // delegate GET/POST to our controller
 

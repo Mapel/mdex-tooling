@@ -20,6 +20,13 @@ public sealed class AuthorizationController(IOpenIddictApplicationManager appMan
         var request = HttpContext.GetOpenIddictServerRequest()
             ?? throw new InvalidOperationException("OpenIddict request not found.");
 
+        var app = await appManager.FindByClientIdAsync(request.ClientId!)
+            ?? throw new InvalidOperationException($"Unknown client: {request.ClientId}");
+
+        // Greedy clients request every advertised scope; grant only the subset this client is
+        // permitted (client-id sets the ceiling). Clamp instead of reject — see IgnoreScopePermissions.
+        var effectiveScopes = await EffectiveScopesAsync(app, request.GetScopes());
+
         if (HttpMethods.IsPost(HttpContext.Request.Method))
         {
             if (Request.Form["decision"] != "allow")
@@ -40,20 +47,31 @@ public sealed class AuthorizationController(IOpenIddictApplicationManager appMan
                 roleType: Claims.Role);
 
             identity.SetClaim(Claims.Subject, "mdex-owner");
-            identity.SetScopes(request.GetScopes());
+            identity.SetScopes(effectiveScopes);
 
             return SignIn(new ClaimsPrincipal(identity),
                 OpenIddictServerAspNetCoreDefaults.AuthenticationScheme);
         }
 
-        // GET — show the consent form
-        var app = await appManager.FindByClientIdAsync(request.ClientId!)
-            ?? throw new InvalidOperationException($"Unknown client: {request.ClientId}");
+        // GET — show the consent form with the effective (clamped) scopes
         var displayName = await appManager.GetDisplayNameAsync(app) ?? request.ClientId!;
 
         return Content(
-            BuildConsentHtml(displayName, request.GetScopes(), Request.QueryString.Value ?? ""),
+            BuildConsentHtml(displayName, effectiveScopes, Request.QueryString.Value ?? ""),
             "text/html");
+    }
+
+    /// <summary>The scopes actually granted: the requested set intersected with the scopes the
+    /// client is permitted (seeded as <c>scp:</c> permissions). Lets greedy clients over-request
+    /// without rejection — the grant is silently clamped to the client's tier.</summary>
+    async Task<string[]> EffectiveScopesAsync(object app, IEnumerable<string> requested)
+    {
+        var permissions = await appManager.GetPermissionsAsync(app);
+        var allowed = permissions
+            .Where(p => p.StartsWith(Permissions.Prefixes.Scope, StringComparison.Ordinal))
+            .Select(p => p[Permissions.Prefixes.Scope.Length..])
+            .ToHashSet(StringComparer.Ordinal);
+        return requested.Where(allowed.Contains).ToArray();
     }
 
     static string BuildConsentHtml(string appName, IEnumerable<string> scopes, string queryString)
