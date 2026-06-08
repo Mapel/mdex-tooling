@@ -60,7 +60,15 @@ public sealed class AuthorizationController(IOpenIddictApplicationManager appMan
     {
         var scopeList = System.Net.WebUtility.HtmlEncode(string.Join(", ", scopes));
         var name = System.Net.WebUtility.HtmlEncode(appName);
-        var action = "/connect/authorize" + System.Net.WebUtility.HtmlEncode(queryString);
+
+        // POST body must contain all original OAuth params — OpenIddict reads only the body on POST
+        var hiddenFields = string.Join("\n  ", queryString.TrimStart('?')
+            .Split('&', StringSplitOptions.RemoveEmptyEntries)
+            .Select(p => p.Split('=', 2))
+            .Where(p => p.Length == 2)
+            .Select(p => $"<input type=\"hidden\" name=\"{System.Net.WebUtility.HtmlEncode(Uri.UnescapeDataString(p[0]))}\" " +
+                         $"value=\"{System.Net.WebUtility.HtmlEncode(Uri.UnescapeDataString(p[1]))}\">"));
+
         return $"""
             <!DOCTYPE html>
             <html lang="en">
@@ -68,7 +76,8 @@ public sealed class AuthorizationController(IOpenIddictApplicationManager appMan
             <body style="font-family:sans-serif;max-width:480px;margin:4rem auto;padding:1rem">
               <h1 style="font-size:1.2rem">Authorize {name}</h1>
               <p>Scopes requested: <strong>{scopeList}</strong></p>
-              <form method="post" action="{action}">
+              <form method="post" action="/connect/authorize">
+                {hiddenFields}
                 <button name="decision" value="allow"
                   style="background:#2563eb;color:#fff;border:none;padding:.5rem 1.5rem;cursor:pointer">
                   Allow
