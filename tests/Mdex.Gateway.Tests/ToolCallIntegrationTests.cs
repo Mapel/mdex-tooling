@@ -8,7 +8,9 @@ namespace Mdex.Gateway.Tests;
 /// End-to-end role enforcement through the real MCP HTTP transport: a genuine MCP client drives the
 /// gateway over the in-memory test server, so this exercises the per-request scoped seam
 /// (HttpRoleProvider → ToolAuthorizer, resolved from RequestServices) that the 401-level tests do not.
-/// With one <c>read</c> token: a read tool call succeeds, a <c>fullwrite</c> tool call is refused.
+/// With one <c>read</c> token: a read tool call succeeds, while a fullwrite tool is hidden from
+/// tools/list yet still refused on a direct call — proving visibility is layered over, not a
+/// replacement for, the in-tool gate (defense-in-depth).
 /// </summary>
 public class ToolCallIntegrationTests : IDisposable
 {
@@ -52,17 +54,17 @@ public class ToolCallIntegrationTests : IDisposable
         var readTool = tools.First(t =>
             t.Name.Contains("list", StringComparison.OrdinalIgnoreCase) &&
             t.Name.Contains("tag", StringComparison.OrdinalIgnoreCase));
-        var writeTool = tools.First(t =>
-            t.Name.Contains("write", StringComparison.OrdinalIgnoreCase) &&
-            t.Name.Contains("file", StringComparison.OrdinalIgnoreCase));
+
+        // the fullwrite tool is hidden from a read token's tools/list (visibility filter)…
+        Assert.DoesNotContain(tools, t => t.Name == "write_file");
 
         // sufficient role → no role error (empty vault → empty result, not an error)
         var allowed = await mcp.CallToolAsync(readTool.Name,
             new Dictionary<string, object?>(), cancellationToken: cts.Token);
         Assert.False(allowed.IsError is true);
 
-        // insufficient role → the scoped authorizer denies the call in-band
-        var denied = await mcp.CallToolAsync(writeTool.Name,
+        // …yet a direct call to the hidden tool is still denied in-band by the scoped authorizer
+        var denied = await mcp.CallToolAsync("write_file",
             new Dictionary<string, object?> { ["path"] = "note.md", ["content"] = "x" },
             cancellationToken: cts.Token);
         Assert.True(denied.IsError is true);

@@ -41,5 +41,9 @@ builder.Services
     .WithStdioServerTransport()
     .WithToolsFromAssembly(typeof(ReadTools).Assembly);
 
+// --- visibility: hide tools above this session's (--role) role from tools/list ---
+builder.Services.Configure<ModelContextProtocol.Server.McpServerOptions>(o =>
+    o.Filters.Request.ListToolsFilters.Add(RoleToolVisibility.ListToolsFilter));
+
 await builder.Build().RunAsync();
 return 0;

@@ -41,6 +41,10 @@ builder.Services.AddMcpServer()
     .WithHttpTransport(options => { options.EnableLegacySse = true; })
     .WithToolsFromAssembly(typeof(ReadTools).Assembly);
 
+// --- visibility: hide tools above the caller's (per-token) role from tools/list ---
+builder.Services.Configure<ModelContextProtocol.Server.McpServerOptions>(o =>
+    o.Filters.Request.ListToolsFilters.Add(RoleToolVisibility.ListToolsFilter));
+
 var app = builder.Build();
 
 app.Services.GetRequiredService<TokenStoreWatcher>();   // touch the singleton so watching starts at boot

@@ -107,6 +107,10 @@ on this machine against the **local checkout** (Claude Code, Cowork, Codex CLI).
 - `write-intent` — adds the 5 intent tools (capture/create/append/promote; non-destructive).
 - `fullwrite` — adds the 5 raw-fs tools (write/append/move/mkdir/delete).
 
+The role also drives **visibility**: `tools/list` only advertises the tools the role may use, so
+the agent never sees (and won't reach for) a tool above its grant. This is layered on top of —
+not a replacement for — the in-tool gate, which still refuses any out-of-role call directly.
+
 There is **no default role**: launching without `--role` is an error, so you always choose
 consciously what the AI may do to the local vault.
 
@@ -129,6 +133,8 @@ the role carried by the caller's bearer token. It is the **sibling** of the loca
 same tools, different transport (design §2).
 
 **Roles (ladder):** `read` ⊂ `write-intent` ⊂ `fullwrite` (9 read / +5 intent / +5 raw-fs tools).
+Each token's role also scopes its `tools/list`: a caller only sees the tools its role may use, while
+the in-tool gate still refuses any out-of-role call (visibility layered over enforcement).
 **Transport:** Streamable HTTP (default) + legacy SSE.
 **Config:** `MDEX_ROOT` (vault), `Mdex:TokenStore` or `MDEX_GATEWAY_TOKENS`
 (default `~/.config/mdex-gateway/tokens.json`), Kestrel URL in `appsettings.json`.
