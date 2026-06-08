@@ -10,7 +10,14 @@ public sealed class PathGuard
 
     /// <summary>Resolve a vault-relative or absolute path; throw if it is empty, the root itself,
     /// or escapes the vault root. Returns the absolute (lexical) path to operate on.</summary>
-    public string ResolveInside(string pathOrRelative)
+    public string ResolveInside(string pathOrRelative) => Resolve(pathOrRelative, allowRoot: false);
+
+    /// <summary>Like <see cref="ResolveInside"/>, but admits the vault root itself — for read-only
+    /// traversal (e.g. <c>list</c>) that legitimately enumerates from the top. Empty paths and
+    /// escapes are still rejected, so a real subpath keeps the full containment guarantee.</summary>
+    public string ResolveInsideOrRoot(string pathOrRelative) => Resolve(pathOrRelative, allowRoot: true);
+
+    string Resolve(string pathOrRelative, bool allowRoot)
     {
         if (string.IsNullOrWhiteSpace(pathOrRelative))
             throw new CommandException("Empty path is not allowed.");
@@ -30,7 +37,9 @@ public sealed class PathGuard
         var rootWithSep = canonicalRoot.EndsWith(Path.DirectorySeparatorChar)
             ? canonicalRoot : canonicalRoot + Path.DirectorySeparatorChar;
 
-        if (canonical.Equals(canonicalRoot, cmp) || !canonical.StartsWith(rootWithSep, cmp))
+        var isRoot = canonical.Equals(canonicalRoot, cmp);
+        var escapes = !isRoot && !canonical.StartsWith(rootWithSep, cmp);
+        if (escapes || (isRoot && !allowRoot))
             throw new CommandException($"Path escapes the vault root: {pathOrRelative}");
 
         return full;

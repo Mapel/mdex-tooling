@@ -45,6 +45,27 @@ public class PathGuardTests : IDisposable
         Assert.Throws<CommandException>(() => guard.ResolveInside(escaping));
     }
 
+    [Theory]
+    [InlineData(".")]
+    [InlineData("inbox/..")]
+    public void ResolveInsideOrRoot_admits_the_root_itself(string pointsAtRoot)
+    {
+        var guard = new PathGuard(_root);
+        var abs = guard.ResolveInsideOrRoot(pointsAtRoot);
+        Assert.Equal(Path.GetFullPath(_root), Path.GetFullPath(abs));
+    }
+
+    [Theory]
+    [InlineData("")]
+    [InlineData("   ")]
+    [InlineData("../escape.md")]
+    [InlineData("inbox/../../escape.md")]
+    public void ResolveInsideOrRoot_still_rejects_empty_and_escapes(string bad)
+    {
+        var guard = new PathGuard(_root);
+        Assert.Throws<CommandException>(() => guard.ResolveInsideOrRoot(bad));
+    }
+
     [Fact]
     public void Different_case_absolute_sibling_is_rejected_on_case_sensitive_fs()
     {

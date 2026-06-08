@@ -12,7 +12,7 @@ public sealed class ListCommand : ICommand
     {
         var reader = new ArgReader(args);
         var sub = reader.Positional(0) ?? ".";
-        var baseAbs = ctx.Guard.ResolveInside(sub);
+        var baseAbs = ctx.Guard.ResolveInsideOrRoot(sub);
         if (!Directory.Exists(baseAbs)) throw new CommandException($"not a directory: {sub}");
 
         var entries = new List<object>();
