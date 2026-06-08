@@ -66,8 +66,8 @@ public sealed class AuthorizationController(IOpenIddictApplicationManager appMan
             .Split('&', StringSplitOptions.RemoveEmptyEntries)
             .Select(p => p.Split('=', 2))
             .Where(p => p.Length == 2)
-            .Select(p => $"<input type=\"hidden\" name=\"{System.Net.WebUtility.HtmlEncode(Uri.UnescapeDataString(p[0]))}\" " +
-                         $"value=\"{System.Net.WebUtility.HtmlEncode(Uri.UnescapeDataString(p[1]))}\">"));
+            .Select(p => $"<input type=\"hidden\" name=\"{System.Net.WebUtility.HtmlEncode(System.Net.WebUtility.UrlDecode(p[0]))}\" " +
+                         $"value=\"{System.Net.WebUtility.HtmlEncode(System.Net.WebUtility.UrlDecode(p[1]))}\">"));
 
         return $"""
             <!DOCTYPE html>
