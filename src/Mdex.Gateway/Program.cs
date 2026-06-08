@@ -5,6 +5,8 @@ using Mdex.Mcp.Tools;
 using Mdex.Mcp.Tools.Tools;
 using Mdex.Tokens;
 using Microsoft.AspNetCore.Authentication;
+using Microsoft.AspNetCore.HttpOverrides;
+using Microsoft.EntityFrameworkCore;
 using OpenIddict.Validation.AspNetCore;
 
 var builder = WebApplication.CreateBuilder(args);
@@ -38,8 +40,14 @@ builder.Services.Configure<List<OAuthClientConfig>>(
 builder.Services.AddHostedService<OAuthClientSeed>();
 
 // --- OpenIddict: AS (authorization server) + Validation (resource server) ---
+builder.Services.AddDbContext<DbContext>(o =>
+{
+    o.UseInMemoryDatabase("openiddict");
+    o.UseOpenIddict();
+});
+
 builder.Services.AddOpenIddict()
-    .AddCore(o => o.UseInMemoryStores())   // no DB needed: clients seeded from config, codes/tokens are JWTs
+    .AddCore(o => o.UseEntityFrameworkCore().UseDbContext<DbContext>())
     .AddServer(o =>
     {
         o.SetAuthorizationEndpointUris("/connect/authorize");
@@ -95,6 +103,14 @@ builder.Services.Configure<ModelContextProtocol.Server.McpServerOptions>(o =>
     o.Filters.Request.ListToolsFilters.Add(RoleToolVisibility.ListToolsFilter));
 
 var app = builder.Build();
+
+var fwdOptions = new ForwardedHeadersOptions
+{
+    ForwardedHeaders = ForwardedHeaders.XForwardedFor | ForwardedHeaders.XForwardedProto,
+};
+fwdOptions.KnownNetworks.Clear();
+fwdOptions.KnownProxies.Clear();
+app.UseForwardedHeaders(fwdOptions);
 
 app.Services.GetRequiredService<TokenStoreWatcher>();   // touch singleton so watching starts at boot
 
