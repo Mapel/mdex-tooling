@@ -26,7 +26,10 @@ public class AuthIntegrationTests : IDisposable
 
     WebApplicationFactory<Program> Factory(string? tokensOverride = null) =>
         new WebApplicationFactory<Program>().WithWebHostBuilder(b =>
-            b.UseSetting("Mdex:Root", _root).UseSetting("Mdex:TokenStore", tokensOverride ?? _tokens));
+        {
+            b.UseSetting("Mdex:Root", _root);
+            b.UseSetting("Mdex:TokenStore", tokensOverride ?? _tokens);
+        });
 
     static HttpRequestMessage McpPost(string? rawAuthHeader)
     {

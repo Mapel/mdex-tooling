@@ -129,21 +129,81 @@ checkout it works in; do **not** register the remote (`mdex-gateway`) there. See
 
 `mdex-gateway` exposes the **same** mdex tools as `mdex-mcp`, but over HTTP for off-machine
 clients (phone, web, Langdock). It hosts `Mdex.Mcp.Tools` in-process and gates every tool by
-the role carried by the caller's bearer token. It is the **sibling** of the local stdio host —
+the role carried by the caller's credential. It is the **sibling** of the local stdio host —
 same tools, different transport (design §2).
 
 **Roles (ladder):** `read` ⊂ `write-intent` ⊂ `fullwrite` (9 read / +5 intent / +5 raw-fs tools).
-Each token's role also scopes its `tools/list`: a caller only sees the tools its role may use, while
-the in-tool gate still refuses any out-of-role call (visibility layered over enforcement).
+Each credential's role also scopes its `tools/list`: a caller only sees the tools its role may
+use, while the in-tool gate still refuses any out-of-role call (visibility layered over
+enforcement).
 **Transport:** Streamable HTTP (default) + legacy SSE.
 **Config:** `MDEX_ROOT` (vault), `Mdex:TokenStore` or `MDEX_GATEWAY_TOKENS`
 (default `~/.config/mdex-gateway/tokens.json`), Kestrel URL in `appsettings.json`.
 Run behind a TLS reverse proxy; the server binds `127.0.0.1` only — never a public interface
-without the proxy (a bearer token over plain HTTP would be in clear text).
+without the proxy (credentials over plain HTTP would be in clear text).
 
-**Credential hygiene (N-4):** configure the gateway's bearer token **only** in off-machine
-clients. On a machine with a local checkout, use `mdex-mcp` (local) — never put the remote
-token in a local agent config.
+**Credential hygiene (N-4):** configure gateway credentials **only** in off-machine clients. On a
+machine with a local checkout, use `mdex-mcp` (local) — never put remote credentials in a local
+agent config.
+
+### Auth: two paths (hybrid)
+
+The gateway accepts **either** credential type on the same endpoint:
+
+| Path | For | How |
+|------|-----|-----|
+| **Custom bearer token** | Langdock, scripts, any client that accepts manual tokens | `mdex-token new` → paste the raw token as `Authorization: Bearer <token>` |
+| **OAuth 2.1** (Authorization Code + PKCE) | claude.ai, ChatGPT, any standard MCP client | Client auto-discovers the AS and drives the flow; you only configure `client_id` + `client_secret` once |
+
+Both paths produce the same role-ladder enforcement — the gateway maps OAuth scopes to roles
+internally; `HttpRoleProvider` and `ToolAuthorizer` see no difference.
+
+### OAuth 2.1 setup
+
+The gateway is its own Authorization Server (collocated, no extra service). Clients are
+configured statically in `appsettings.json` under `Mdex:OAuthClients`:
+
+```json
+"Mdex": {
+  "OAuthClients": [
+    {
+      "ClientId": "mdex-write-intent",
+      "ClientSecret": "your-secret-here",
+      "DisplayName": "mdex write-intent",
+      "Scopes": ["mdex:read", "mdex:write-intent"],
+      "RedirectUris": [
+        "https://claude.ai/api/mcp/auth_callback",
+        "https://chatgpt.com/connector_platform_oauth_redirect"
+      ]
+    }
+  ]
+}
+```
+
+One client per role. Multiple `RedirectUris` let the same `client_id`/`secret` pair be reused
+across services — enter the same credentials in both claude.ai's and ChatGPT's connector
+settings.
+
+**Scopes map to roles:**
+
+| Scope | Role |
+|-------|------|
+| `mdex:read` | `read` |
+| `mdex:write-intent` | `write-intent` (includes read) |
+| `mdex:fullwrite` | `fullwrite` (includes all) |
+
+**Discovery endpoints** (served automatically, no auth required):
+
+| Endpoint | Standard | Purpose |
+|----------|----------|---------|
+| `/.well-known/oauth-protected-resource` | RFC 9728 | Points MCP clients to the AS |
+| `/.well-known/oauth-authorization-server` | RFC 8414 | AS metadata (endpoints, PKCE methods) |
+
+**Connecting claude.ai:** add a custom connector → enter the gateway URL → Advanced settings →
+supply `client_id` and `client_secret`. Claude auto-discovers the AS and handles the login flow.
+
+**Before go-live:** the gateway uses ephemeral signing keys by default — tokens are invalidated
+on restart. Replace with a persistent X.509 certificate before production use.
 
 ## mdex-token (token admin)
 

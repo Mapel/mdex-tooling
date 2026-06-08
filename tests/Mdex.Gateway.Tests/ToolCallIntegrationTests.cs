@@ -34,7 +34,10 @@ public class ToolCallIntegrationTests : IDisposable
     async Task<McpClient> ConnectAsync(string rawToken, CancellationToken ct)
     {
         var factory = new WebApplicationFactory<Program>().WithWebHostBuilder(b =>
-            b.UseSetting("Mdex:Root", _root).UseSetting("Mdex:TokenStore", _tokens));
+        {
+            b.UseSetting("Mdex:Root", _root);
+            b.UseSetting("Mdex:TokenStore", _tokens);
+        });
         var http = factory.CreateClient();
         var transport = new HttpClientTransport(new HttpClientTransportOptions
         {

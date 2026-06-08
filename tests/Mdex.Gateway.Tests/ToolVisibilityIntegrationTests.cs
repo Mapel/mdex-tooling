@@ -36,7 +36,10 @@ public class ToolVisibilityIntegrationTests : IDisposable
     async Task<string[]> ListToolNamesAsync(string rawToken, CancellationToken ct)
     {
         var factory = new WebApplicationFactory<Program>().WithWebHostBuilder(b =>
-            b.UseSetting("Mdex:Root", _root).UseSetting("Mdex:TokenStore", _tokens));
+        {
+            b.UseSetting("Mdex:Root", _root);
+            b.UseSetting("Mdex:TokenStore", _tokens);
+        });
         var http = factory.CreateClient();
         var transport = new HttpClientTransport(new HttpClientTransportOptions
         {
