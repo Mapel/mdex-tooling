@@ -210,7 +210,9 @@ settings.
 supply `client_id` and `client_secret`. Claude auto-discovers the AS and handles the login flow.
 
 **Before go-live:** the gateway uses ephemeral signing keys by default — tokens are invalidated
-on restart. Replace with a persistent X.509 certificate before production use.
+on restart. Configure a persistent X.509 signing certificate (`MDEX_SIGNING_CERT_PATH` /
+`MDEX_SIGNING_CERT_PASS`) before production use. See [`deploy/`](deploy/) for the deployment
+template and a step-by-step certificate setup.
 
 ## mdex-token (token admin)
 

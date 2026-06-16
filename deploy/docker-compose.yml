@@ -1,0 +1,53 @@
+# Production deployment for the mdex gateway (remote MCP server).
+#
+# This is a REDACTED template. Copy it to your deploy host, fill in the secrets,
+# and keep your filled-in copy OUT of version control. Secrets below are placeholders.
+#
+# Topology: the gateway runs behind an nginx-proxy + letsencrypt companion on a shared
+# external docker network. nginx-proxy terminates TLS and routes VIRTUAL_HOST -> VIRTUAL_PORT.
+#
+# Redeploy after a code change:
+#   docker compose up -d --build
+# (builds the working tree of the mdex-tooling checkout referenced by `build:`)
+
+services:
+  mdex-gateway:
+    build: /path/to/mdex-tooling          # local checkout of this repo
+    image: mdex-gateway:local
+    container_name: mdex-gateway
+    restart: unless-stopped
+    user: "1000:1000"
+    environment:
+      MDEX_ROOT: /vault                    # data vault (mounted below) — NOT the code repo
+      MDEX_GATEWAY_TOKENS: /tokens/tokens.json
+      # OpenIddict store (OAuth authorizations + refresh tokens). Optional — defaults to
+      # openiddict.db next to MDEX_GATEWAY_TOKENS, i.e. /tokens/openiddict.db on the volume below.
+      # MDEX_OPENIDDICT_DB: /tokens/openiddict.db
+
+      # Persistent OAuth signing key (see deploy/README.md to generate signing.pfx).
+      # Without these the gateway uses an ephemeral key and invalidates all tokens on restart.
+      MDEX_SIGNING_CERT_PATH: /certs/signing.pfx
+      MDEX_SIGNING_CERT_PASS: "REPLACE_WITH_PFX_PASSWORD"
+
+      Kestrel__Endpoints__Http__Url: "http://0.0.0.0:3001"
+
+      # nginx-proxy / letsencrypt-companion routing
+      VIRTUAL_HOST: mdex-mcp.example.com
+      VIRTUAL_PORT: "3001"
+      LETSENCRYPT_HOST: mdex-mcp.example.com
+      LETSENCRYPT_EMAIL: you@example.com
+
+      # One OAuth client per role (see README.md "OAuth 2.1 setup").
+      Mdex__OAuthClients__0__ClientSecret: "REPLACE_CLIENT_0_SECRET"
+      Mdex__OAuthClients__1__ClientSecret: "REPLACE_CLIENT_1_SECRET"
+      Mdex__OAuthClients__2__ClientSecret: "REPLACE_CLIENT_2_SECRET"
+    volumes:
+      - /path/to/mdex-vault:/vault         # data vault (read/write)
+      - ./tokens:/tokens                   # token store (persisted)
+      - ./certs:/certs:ro                  # signing cert (read-only)
+    networks: [proxy]
+
+networks:
+  proxy:
+    external: true
+    name: nextcloud-docker_nextcloud_network
