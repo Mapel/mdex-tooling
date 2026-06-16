@@ -1,3 +1,4 @@
+using System.Security.Cryptography.X509Certificates;
 using Mdex.Core.Cli;
 using Mdex.Core.Security;
 using Mdex.Gateway.Auth;
@@ -65,9 +66,19 @@ builder.Services.AddOpenIddict()
         o.UseAspNetCore()
             .EnableAuthorizationEndpointPassthrough();   // delegate GET/POST to our controller
 
-        // Ephemeral keys — replace with a persistent X.509 certificate before go-live
-        o.AddEphemeralEncryptionKey();
-        o.AddEphemeralSigningKey();
+        // Signing key: persistent X.509 certificate so tokens survive process restarts.
+        // Supply via MDEX_SIGNING_CERT_PATH + MDEX_SIGNING_CERT_PASS (or Mdex:SigningCert:* in config).
+        // In dev/CI, fall back to an ephemeral key when no cert is configured.
+        var certPath = builder.Configuration["Mdex:SigningCert:Path"]
+            ?? Environment.GetEnvironmentVariable("MDEX_SIGNING_CERT_PATH");
+        var certPass = builder.Configuration["Mdex:SigningCert:Password"]
+            ?? Environment.GetEnvironmentVariable("MDEX_SIGNING_CERT_PASS") ?? "";
+        if (!string.IsNullOrWhiteSpace(certPath))
+            o.AddSigningCertificate(new X509Certificate2(certPath, certPass));
+        else
+            o.AddEphemeralSigningKey();   // dev/CI only — tokens invalidated on restart
+
+        o.AddEphemeralEncryptionKey();      // encryption key can always be ephemeral (tokens are unencrypted)
         o.DisableAccessTokenEncryption();   // keeps JWTs readable; required by some MCP clients
     })
     .AddValidation(o =>
