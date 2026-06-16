@@ -25,12 +25,24 @@ public class TagCommandsTests
     }
 
     [Fact]
-    public void SearchTags_substring_match()
+    public void ListTags_pattern_filters_by_name()
     {
         using var v = new TestVault();
         v.WriteNote("zettel/a.md", "---\ntype: zettel\ntags: [deep-work, fokus]\n---\n# A\n");
-        var tags = new SearchTagsCommand().Run(new[] { "work" }, Ctx(v)).Data()
-            .GetProperty("tags").EnumerateArray().Select(t => t.GetString()).ToArray();
+        var tags = new ListTagsCommand().Run(new[] { "work" }, Ctx(v)).Data()
+            .GetProperty("tags").EnumerateArray().Select(t => t.GetProperty("tag").GetString()).ToArray();
         Assert.Equal(new[] { "deep-work" }, tags);
+    }
+
+    [Fact]
+    public void ListTags_top_caps_results()
+    {
+        using var v = new TestVault();
+        v.WriteNote("zettel/a.md", "---\ntype: zettel\ntags: [a, b]\n---\n# A\n");
+        v.WriteNote("zettel/b.md", "---\ntype: zettel\ntags: [a]\n---\n# B\n");
+        var tags = new ListTagsCommand().Run(new[] { "--top", "1" }, Ctx(v)).Data()
+            .GetProperty("tags").EnumerateArray().ToList();
+        Assert.Single(tags);
+        Assert.Equal("a", tags[0].GetProperty("tag").GetString());   // highest count wins
     }
 }

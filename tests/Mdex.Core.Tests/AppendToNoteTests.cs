@@ -24,6 +24,17 @@ public class AppendToNoteTests
     }
 
     [Fact]
+    public void Appends_and_merges_tags()
+    {
+        using var v = new TestVault();
+        v.WriteNote("zettel/a.md", "---\ntype: zettel\ntags: [x]\n---\n\n# A\n\nold\n");
+        new AppendToNoteCommand().Run(new[] { "a", "--content", "more", "--tag", "y", "--tag", "x" }, Ctx(v));
+        var text = v.Read("zettel/a.md");
+        Assert.Contains("more", text);
+        Assert.Contains("tags: [x, y]", text);   // y added, x not duplicated
+    }
+
+    [Fact]
     public void Ambiguous_slug_throws_and_writes_nothing()
     {
         using var v = new TestVault();

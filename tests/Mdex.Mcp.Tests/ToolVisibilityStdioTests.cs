@@ -41,7 +41,7 @@ public class ToolVisibilityStdioTests
         using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(60));
         var names = await ListToolNamesAsync("read", cts.Token);
 
-        Assert.Equal(9, names.Length);
+        Assert.Equal(7, names.Length);
         Assert.Contains("search", names);
         Assert.DoesNotContain("capture_inbox", names);
         Assert.DoesNotContain("write_file", names);
@@ -53,6 +53,6 @@ public class ToolVisibilityStdioTests
         using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(60));
         var names = await ListToolNamesAsync("fullwrite", cts.Token);
 
-        Assert.Equal(19, names.Length);
+        Assert.Equal(20, names.Length);
     }
 }

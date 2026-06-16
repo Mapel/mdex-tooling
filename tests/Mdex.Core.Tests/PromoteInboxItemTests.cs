@@ -29,4 +29,21 @@ public class PromoteInboxItemTests
         Assert.Contains("created: 2026-06-01T09:00:00", text);   // preserved
         Assert.Contains("Eine rohe Idee.", text);
     }
+
+    [Fact]
+    public void Promotes_legacy_item_with_incomplete_frontmatter()
+    {
+        using var v = new TestVault();
+        // Older capture: only `tags: []`, no type/created — used to make promote fail.
+        v.WriteNote("inbox/20260601-02.md", "---\ntags: []\n---\n\nAlte rohe Idee.\n");
+        var to = new PromoteInboxItemCommand().Run(
+            new[] { "20260601-02", "zettel", "--name", "alt" }, Ctx(v))
+            .Data().GetProperty("to").GetString();
+
+        Assert.Equal("zettel/alt.md", to);
+        var text = v.Read(to);
+        Assert.Contains("type: zettel", text);     // frontmatter rebuilt
+        Assert.Contains("created:", text);          // repaired
+        Assert.Contains("Alte rohe Idee.", text);
+    }
 }

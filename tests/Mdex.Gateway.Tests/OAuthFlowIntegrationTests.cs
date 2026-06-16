@@ -190,7 +190,7 @@ public class OAuthFlowIntegrationTests : IDisposable
         await using var mcp = await McpClient.CreateAsync(transport, cancellationToken: cts.Token);
         var tools = await mcp.ListToolsAsync(cancellationToken: cts.Token);
 
-        Assert.Equal(9, tools.Count);
+        Assert.Equal(7, tools.Count);
         Assert.DoesNotContain(tools, t => t.Name == "capture_inbox");
         Assert.DoesNotContain(tools, t => t.Name == "write_file");
     }

@@ -28,4 +28,25 @@ public class SearchCommandTests
         using var v = new TestVault();
         Assert.Throws<CommandException>(() => new SearchCommand().Run(Array.Empty<string>(), Ctx(v)));
     }
+
+    static int Hits(CommandResult r) => r.Data().GetProperty("hits").GetArrayLength();
+
+    [Fact]
+    public void Match_all_requires_every_term()
+    {
+        using var v = new TestVault();
+        v.WriteNote("zettel/a.md", "---\ntype: zettel\n---\n\n# A\n\nEmergenz und Komplexität.\n");
+        v.WriteNote("zettel/b.md", "---\ntype: zettel\n---\n\n# B\n\nNur Emergenz hier.\n");
+        // default --match all: both terms must appear → only a
+        Assert.Equal(1, Hits(new SearchCommand().Run(new[] { "Emergenz Komplexität" }, Ctx(v))));
+    }
+
+    [Fact]
+    public void Match_any_needs_one_term()
+    {
+        using var v = new TestVault();
+        v.WriteNote("zettel/a.md", "---\ntype: zettel\n---\n\n# A\n\nEmergenz und Komplexität.\n");
+        v.WriteNote("zettel/b.md", "---\ntype: zettel\n---\n\n# B\n\nNur Emergenz hier.\n");
+        Assert.Equal(2, Hits(new SearchCommand().Run(new[] { "Emergenz", "Komplexität", "--match", "any" }, Ctx(v))));
+    }
 }

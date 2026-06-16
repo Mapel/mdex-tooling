@@ -18,12 +18,37 @@ public class ReadNoteCommandTests
         using var v = new TestVault();
         v.WriteNote("zettel/a.md", "---\ntype: zettel\n---\n\n# A\n\nHello\n");
         var d = new ReadNoteCommand().Run(new[] { "a" }, Ctx(v)).Data();
-        Assert.Equal("a", d.GetProperty("slug").GetString());
-        Assert.Contains("Hello", d.GetProperty("body").GetString());
+        var note = d.GetProperty("notes")[0];
+        Assert.Equal("a", note.GetProperty("slug").GetString());
+        Assert.Contains("Hello", note.GetProperty("body").GetString());
+        Assert.Empty(d.GetProperty("errors").EnumerateArray());
     }
 
     [Fact]
-    public void Throws_when_missing()
+    public void Reads_multiple_targets()
+    {
+        using var v = new TestVault();
+        v.WriteNote("zettel/a.md", "---\ntype: zettel\n---\n\n# A\n\nAlpha\n");
+        v.WriteNote("zettel/b.md", "---\ntype: zettel\n---\n\n# B\n\nBeta\n");
+        var notes = new ReadNoteCommand().Run(new[] { "a", "b" }, Ctx(v)).Data()
+            .GetProperty("notes").EnumerateArray()
+            .Select(n => n.GetProperty("slug").GetString()).ToList();
+        Assert.Equal(new[] { "a", "b" }, notes);
+    }
+
+    [Fact]
+    public void Partial_success_returns_found_and_errors()
+    {
+        using var v = new TestVault();
+        v.WriteNote("zettel/a.md", "---\ntype: zettel\n---\n\n# A\n\nAlpha\n");
+        var d = new ReadNoteCommand().Run(new[] { "a", "nope" }, Ctx(v)).Data();
+        Assert.Single(d.GetProperty("notes").EnumerateArray());
+        var err = d.GetProperty("errors")[0];
+        Assert.Equal("nope", err.GetProperty("target").GetString());
+    }
+
+    [Fact]
+    public void Throws_when_all_targets_missing()
     {
         using var v = new TestVault();
         Assert.Throws<CommandException>(() => new ReadNoteCommand().Run(new[] { "nope" }, Ctx(v)));
@@ -52,6 +77,6 @@ public class ReadNoteCommandTests
         v.WriteNote("projects/a/index.md", "---\ntype: project\n---\n\n# A\n\nAlpha\n");
         v.WriteNote("projects/b/index.md", "---\ntype: project\n---\n\n# B\n\nBeta\n");
         var d = new ReadNoteCommand().Run(new[] { "projects/b/index.md" }, Ctx(v)).Data();
-        Assert.Contains("Beta", d.GetProperty("body").GetString());
+        Assert.Contains("Beta", d.GetProperty("notes")[0].GetProperty("body").GetString());
     }
 }

@@ -66,4 +66,19 @@ public class ArgReaderTests
         Assert.True(r.Has("--verbose"));
         Assert.Null(r.Flag("--verbose"));
     }
+
+    [Fact]
+    public void Multi_accumulates_repeated_flags()
+    {
+        var r = new ArgReader(new[] { "--tag", "a", "--tag", "b", "--tag=c" });
+        Assert.Equal(new[] { "a", "b", "c" }, r.Multi("--tag"));
+        Assert.Equal("c", r.Flag("--tag"));     // single lookup yields the last value
+    }
+
+    [Fact]
+    public void Multi_is_empty_when_absent()
+    {
+        var r = new ArgReader(new[] { "--other", "x" });
+        Assert.Empty(r.Multi("--tag"));
+    }
 }

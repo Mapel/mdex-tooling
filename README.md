@@ -59,42 +59,48 @@ is shared by several notes, read commands list the candidates and write commands
 refuse — pass an explicit path to disambiguate. Content for write commands comes
 from `--content <text>` or piped stdin.
 
+The role split is **convention-preserving vs. convention-breaking**: write-intent may do
+anything that keeps frontmatter/structure intact; fullwrite is the deliberate escape hatch.
+The system owns the frontmatter — the AI only ever touches `tags`.
+
 #### Read
 
 | Command | Description |
 |---------|-------------|
-| `search <query>` | Full-text substring search over title + body (one hit per note). |
-| `read-note <slug\|path>` | Print a note's frontmatter and body. |
-| `get-by-tag <tag>...` | Notes carrying **all** of the given tags. |
-| `get-by-type <type>` | Notes whose frontmatter `type` matches. |
-| `get-by-date-range (--from <date> \| --to <date>) [--field created\|modified]` | Notes in a date range. At least one bound required; the other is open-ended. `--field` defaults to `created`. Notes without that date are excluded. |
-| `list-tags` | All tags with their counts. |
-| `search-tags <pattern>` | Tags containing the given substring. |
-| `list [path]` | Recursive file/dir tree under an optional vault-relative subpath. |
-| `find-related <slug\|path> [--maxhops N] [--recursive]` | Notes linked via `[[wikilinks]]` in both directions. Depth 1 by default; `--maxhops N` caps the depth; `--recursive` walks the whole connected component (cycles terminate). Given both, `--maxhops` wins as the ceiling. |
+| `search <query> [--match all\|any]` | Full-text substring search over title + body (one hit per note). `--match` combines whitespace terms (default `all`). |
+| `read-note <target>...` | Print one or more notes' frontmatter and body. Partial success: missing targets are listed under `errors`. |
+| `find-notes [--tag X...] [--type T] [--from D] [--to D] [--field created\|modified] [--match all\|any]` | Find notes by tag, type, and/or date range. Different filters AND; `--match` governs how `--tag` values combine (default `all`). Replaces the former `get-by-tag` / `get-by-type` / `get-by-date-range`. |
+| `list-tags [pattern] [--top N]` | All tags with their counts, sorted by frequency. `pattern` filters tag names; `--top N` caps the list. |
+| `list [path] [--depth N\|all]` | File/dir tree under an optional vault-relative subpath. Default depth 1 (direct children); `--depth N` descends N levels, `--depth all` is fully recursive. |
+| `find-related <slug\|path> [--depth N\|all] [--direction in\|out\|both]` | Notes linked via `[[wikilinks]]`. Default depth 1, both directions; results are direction-labelled. Backlinks = `--direction in --depth 1`. |
+| `list-todos [--status open\|done\|all] [--in <path>]` | Collect checkboxes (`- [ ]` / `- [x]`) across all notes. Default open only; `--in` scopes to a subtree. |
 
-#### Write
+#### Write (write-intent — convention-preserving)
 
 | Command | Description |
 |---------|-------------|
-| `capture-inbox (--content <text> \| stdin)` | Append a new timestamped `inbox/YYYYMMDD-NN.md` entry. |
-| `create <type> <name> [--no-body] [--body <tpl>]` | Create a note. `type` ∈ `zettel\|project\|area\|reference`; non-zettel `name` may contain a subpath. `--no-body` writes frontmatter only; `--body <tpl>` selects a body template. |
-| `append-to-note <slug\|path> (--content <text> \| stdin)` | Append a section and bump `modified`. |
+| `capture-inbox --title <t> (--content <text> \| stdin)` | Create an inbox entry. Title is **required** (sets the H1 and derives `inbox/YYYYMMDD-<title-slug>.md`). |
+| `create <type> <name> [--tag X...] [--no-body] [--body <tpl>]` | Create a note. `type` ∈ `zettel\|project\|area\|reference`; non-zettel `name` may contain a subpath. `--tag` sets initial tags; `--no-body` writes frontmatter only; `--body <tpl>` selects a body template. |
+| `append-to-note <slug\|path> (--content <text> \| stdin) [--tag X...]` | Append a section and bump `modified`. `--tag` merges tags. |
 | `append-to-log <slug\|path> (--content <text> \| stdin)` | Add a dated bullet under the note's `## Log` section (created if absent). |
-| `promote-inbox-item <inbox> <type> [--name <name>]` | Move an inbox item into a typed folder. `--name` overrides the target slug. |
+| `promote-inbox-item <inbox> <type> [--name <name>]` | Move an inbox item into a typed folder, repairing missing/incomplete frontmatter. `--name` overrides the target slug. |
+| `move <from> <to>` | Move/rename a file or directory. Re-derives `type` from the destination folder (archive keeps its type), bumps `modified`, creates parent dirs, never overwrites. Covers rename + move-to-archive + general relocation. |
+| `replace-body <slug\|path> (--content <text> \| stdin)` | Replace a note's body, preserving its frontmatter (and bumping `modified`). |
+| `set-tags <slug\|path> (--add \| --remove \| --set) <tag>...` | Mutate a note's tags — the only AI path to frontmatter. Exactly one mode required. |
+| `mkdir <path>` | Create a directory (deliberate empty-folder scaffolding). |
+| `set-todo <slug\|path> --match <text> --status open\|done` | Set a checkbox's status by text-match. Fails on 0 or 2+ matches (the human disambiguates). |
+| `commit-and-push --message <msg>` | Atomically commit all changes, rebase on the remote, and push. Use after a logical unit of work (semantic message, no `auto:` prefix). |
 
-#### Raw FS (guarded to the vault root)
+#### Raw FS (fullwrite — convention-breaking, guarded to the vault root)
 
 | Command | Description |
 |---------|-------------|
-| `write-file <path> (--content <text> \| stdin)` | Create or overwrite a file. |
-| `append-file <path> (--content <text> \| stdin)` | Append to a file. |
-| `move <from> <to>` | Move a file or directory (no overwrite). |
-| `mkdir <path>` | Create a directory. |
-| `delete <path>` | Delete a file or directory (recursive). |
+| `write-file <path> (--content <text> \| stdin)` | Create or overwrite a file — the convention escape hatch (frontmatter/templates ignored). |
+| `delete <path>` | Delete a file or directory (recursive); the only pre-commit irreversible operation. |
 
-All paths are jailed to the vault root. The CLI never touches git — the vault's
-`mdex-autocommit.sh` is the only committer.
+All paths are jailed to the vault root. `commit-and-push` is the one write-intent tool whose
+subject is the repo state rather than a note — every other CLI command leaves git to the
+vault's `mdex-autocommit.sh`.
 
 ## mdex-mcp (local MCP server)
 
@@ -103,9 +109,10 @@ on this machine against the **local checkout** (Claude Code, Cowork, Codex CLI).
 `Mdex.Core` in-process — no network, no token, no ASP.NET — and stages every tool by role.
 
 **Roles (ladder, fail-closed — you must pass `--role`):** `read` ⊂ `write-intent` ⊂ `fullwrite`
-- `read` — the 9 retrieval tools.
-- `write-intent` — adds the 5 intent tools (capture/create/append/promote; non-destructive).
-- `fullwrite` — adds the 5 raw-fs tools (write/append/move/mkdir/delete).
+- `read` — the 7 retrieval tools.
+- `write-intent` — adds the 11 intent tools (capture/create/append/promote/move/replace-body/
+  set-tags/mkdir/set-todo/commit-and-push; convention-preserving).
+- `fullwrite` — adds the 2 raw-fs tools (write-file/delete; convention-breaking).
 
 The role also drives **visibility**: `tools/list` only advertises the tools the role may use, so
 the agent never sees (and won't reach for) a tool above its grant. This is layered on top of —
@@ -132,7 +139,7 @@ clients (phone, web, Langdock). It hosts `Mdex.Mcp.Tools` in-process and gates e
 the role carried by the caller's credential. It is the **sibling** of the local stdio host —
 same tools, different transport (design §2).
 
-**Roles (ladder):** `read` ⊂ `write-intent` ⊂ `fullwrite` (9 read / +5 intent / +5 raw-fs tools).
+**Roles (ladder):** `read` ⊂ `write-intent` ⊂ `fullwrite` (7 read / +11 intent / +2 raw-fs tools).
 Each credential's role also scopes its `tools/list`: a caller only sees the tools its role may
 use, while the in-tool gate still refuses any out-of-role call (visibility layered over
 enforcement).

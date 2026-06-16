@@ -7,8 +7,8 @@ namespace Mdex.Core.Commands.Write;
 public sealed class AppendToNoteCommand : ICommand
 {
     public string Name => "append-to-note";
-    public string Usage => "append-to-note <slug|path> (--content <text> | stdin)";
-    public string Summary => "Append a section and bump the modified date.";
+    public string Usage => "append-to-note <slug|path> (--content <text> | stdin) [--tag X...]";
+    public string Summary => "Append a section and bump the modified date; optionally add tags.";
 
     public CommandResult Run(string[] args, CliContext ctx)
     {
@@ -16,13 +16,29 @@ public sealed class AppendToNoteCommand : ICommand
         var key = reader.Positional(0) ?? throw new CommandException("append-to-note needs a slug or path");
         var content = reader.Content();
         if (string.IsNullOrWhiteSpace(content)) throw new CommandException("append-to-note needs --content or stdin");
+        var newTags = reader.Multi("--tag");
 
         var note = Resolver.Single(ctx, key, $"note not found: {key}");
         var text = File.ReadAllText(note.Path).Replace("\r\n", "\n").TrimEnd('\n');
         text += "\n\n" + content.TrimEnd() + "\n";
         text = FrontmatterEditor.SetField(text, "modified", DateTime.Now.ToString("yyyy-MM-dd"));
-        File.WriteAllText(note.Path, text, new UTF8Encoding(false));
 
+        if (newTags.Count > 0)
+        {
+            var merged = Union(note.Frontmatter.Tags, newTags);
+            text = FrontmatterEditor.SetTags(text, merged);
+        }
+
+        File.WriteAllText(note.Path, text, new UTF8Encoding(false));
         return CommandResult.Of(new { path = note.RelativePath }, $"✓ appended to {note.RelativePath}");
+    }
+
+    static List<string> Union(IEnumerable<string> existing, IEnumerable<string> added)
+    {
+        var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        var ordered = new List<string>();
+        foreach (var t in existing.Concat(added))
+            if (!string.IsNullOrWhiteSpace(t) && seen.Add(t)) ordered.Add(t);
+        return ordered;
     }
 }

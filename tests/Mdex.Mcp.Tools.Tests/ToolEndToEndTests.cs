@@ -14,7 +14,7 @@ public class ToolEndToEndTests
     {
         using var v = new TestVault();
         v.WriteNote("zettel/a.md", "---\ntype: zettel\n---\n# A\n\nHello world\n");
-        var data = ReadTools.ReadNote(Backend(v.Root), Auth(Role.Read), "a");
+        var data = ReadTools.ReadNote(Backend(v.Root), Auth(Role.Read), new[] { "a" });
         Assert.Contains("Hello world", JsonSerializer.Serialize(data));
     }
 
@@ -27,7 +27,7 @@ public class ToolEndToEndTests
         // neither the server's absolute vault path nor the target file's contents. (The caller's
         // own input string may appear in a "not found" message — that is an echo, not a leak.)
         var ex = Assert.Throws<MdexToolException>(
-            () => ReadTools.ReadNote(Backend(v.Root), Auth(Role.Read), "../../../etc/passwd"));
+            () => ReadTools.ReadNote(Backend(v.Root), Auth(Role.Read), new[] { "../../../etc/passwd" }));
         Assert.DoesNotContain(v.Root, ex.Message);    // no server-side absolute path leaked (D-4)
         Assert.DoesNotContain("root:", ex.Message);   // proves /etc/passwd was never actually read
     }
@@ -38,7 +38,7 @@ public class ToolEndToEndTests
         using var v = new TestVault();
         var backend = Backend(v.Root);
         var read = Auth(Role.Read);
-        Assert.Throws<MdexToolException>(() => IntentTools.CaptureInbox(backend, read, "hello"));
+        Assert.Throws<MdexToolException>(() => IntentTools.CaptureInbox(backend, read, "title", "hello"));
         Assert.Throws<MdexToolException>(() => RawFsTools.Delete(backend, read, "zettel/a.md"));
     }
 
@@ -54,7 +54,7 @@ public class ToolEndToEndTests
     public void Intent_tool_runs_for_write_intent_role()
     {
         using var v = new TestVault();
-        var data = IntentTools.CaptureInbox(Backend(v.Root), Auth(Role.WriteIntent), "a captured thought");
+        var data = IntentTools.CaptureInbox(Backend(v.Root), Auth(Role.WriteIntent), "a thought", "a captured thought");
         Assert.NotNull(data);                          // succeeds (no throw) and returns the Data object
     }
 }

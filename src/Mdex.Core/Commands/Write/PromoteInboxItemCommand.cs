@@ -25,7 +25,12 @@ public sealed class PromoteInboxItemCommand : ICommand
             throw new CommandException($"unknown target type '{targetType}'");
 
         var source = Resolver.Single(ctx, sourceKey, $"inbox item not found: {sourceKey}");
-        if (source.Frontmatter.Type != "inbox")
+        // Accept anything living under inbox/, even older captures whose frontmatter is incomplete
+        // (only `tags: []`, no type/created). The promote rebuilds frontmatter from scratch below,
+        // so a missing type is repaired here instead of being a failure (fix for legacy items).
+        var isInbox = source.Frontmatter.Type == "inbox"
+            || source.RelativePath.StartsWith("inbox/", StringComparison.OrdinalIgnoreCase);
+        if (!isInbox)
             throw new CommandException($"not an inbox item: {sourceKey}");
 
         var name = reader.Flag("--name") ?? source.Slug;

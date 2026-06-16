@@ -15,26 +15,27 @@ public static class CommandFactory
         // Read commands
         r.Add(new SearchCommand());
         r.Add(new ReadNoteCommand());
-        r.Add(new GetByTagCommand());
-        r.Add(new GetByTypeCommand());
-        r.Add(new GetByDateRangeCommand());
+        r.Add(new FindNotesCommand());
         r.Add(new ListTagsCommand());
-        r.Add(new SearchTagsCommand());
         r.Add(new ListCommand());
         r.Add(new FindRelatedCommand());
+        r.Add(new ListTodosCommand());
 
-        // Write / intent commands
+        // Write / intent commands (convention-preserving)
         r.Add(new CaptureInboxCommand());
         r.Add(new CreateCommand());
         r.Add(new AppendToNoteCommand());
         r.Add(new AppendToLogCommand());
         r.Add(new PromoteInboxItemCommand());
-
-        // Raw FS commands (guarded notausgang)
-        r.Add(new WriteFileCommand());
-        r.Add(new AppendFileCommand());
         r.Add(new MoveCommand());
+        r.Add(new ReplaceBodyCommand());
+        r.Add(new SetTagsCommand());
         r.Add(new MkdirCommand());
+        r.Add(new SetTodoCommand());
+        r.Add(new CommitAndPushCommand());
+
+        // Raw FS commands (guarded notausgang — convention-breaking)
+        r.Add(new WriteFileCommand());
         r.Add(new DeleteCommand());
 
         return r;
