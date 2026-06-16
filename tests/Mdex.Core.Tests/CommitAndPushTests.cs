@@ -33,6 +33,17 @@ public class CommitAndPushTests
         catch { return false; }
     }
 
+    // Hermetic repo: fixed identity and signing OFF, so the test never depends on the
+    // host's git config (some CI sandboxes force commit signing through a sign server).
+    static void InitRepo(string dir)
+    {
+        Git(dir, "init -b main");
+        Git(dir, "config user.email test@example.com");
+        Git(dir, "config user.name Test");
+        Git(dir, "config commit.gpgsign false");
+        Git(dir, "config tag.gpgsign false");
+    }
+
     [Fact]
     public void Commits_and_pushes_to_the_remote()
     {
@@ -46,9 +57,7 @@ public class CommitAndPushTests
         try
         {
             Git(remote, "init --bare -b main");
-            Git(work, "init -b main");
-            Git(work, "config user.email test@example.com");
-            Git(work, "config user.name Test");
+            InitRepo(work);
             Git(work, $"remote add origin \"{remote}\"");
             File.WriteAllText(Path.Combine(work, "seed.md"), "seed\n");
             Git(work, "add -A");
@@ -75,9 +84,7 @@ public class CommitAndPushTests
         Directory.CreateDirectory(work);
         try
         {
-            Git(work, "init -b main");
-            Git(work, "config user.email test@example.com");
-            Git(work, "config user.name Test");
+            InitRepo(work);
             File.WriteAllText(Path.Combine(work, "seed.md"), "seed\n");
             Git(work, "add -A");
             Git(work, "commit -m initial");
