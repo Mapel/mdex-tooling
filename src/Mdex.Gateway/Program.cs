@@ -20,6 +20,14 @@ if (string.IsNullOrWhiteSpace(vaultRoot))
 var tokenPath = builder.Configuration["Mdex:TokenStore"];
 if (string.IsNullOrWhiteSpace(tokenPath)) tokenPath = TokenPaths.Default();
 
+// OpenIddict store (authorizations + tokens) — persisted in a SQLite file so OAuth sessions and
+// refresh tokens survive restarts/redeploys. Defaults next to the token store (same volume).
+var openiddictDbPath = builder.Configuration["Mdex:OpenIddictDb"];
+if (string.IsNullOrWhiteSpace(openiddictDbPath))
+    openiddictDbPath = Environment.GetEnvironmentVariable("MDEX_OPENIDDICT_DB");
+if (string.IsNullOrWhiteSpace(openiddictDbPath))
+    openiddictDbPath = Path.Combine(Path.GetDirectoryName(Path.GetFullPath(tokenPath)) ?? ".", "openiddict.db");
+
 // --- shared singletons: engine, in-process backend (server vault root), token store + watcher ---
 var engine = CommandEngine.Default();
 var tokenStore = new TokenStore(tokenPath);
@@ -43,7 +51,7 @@ builder.Services.AddHostedService<OAuthClientSeed>();
 // --- OpenIddict: AS (authorization server) + Validation (resource server) ---
 builder.Services.AddDbContext<DbContext>(o =>
 {
-    o.UseInMemoryDatabase("openiddict");
+    o.UseSqlite($"Data Source={openiddictDbPath}");
     o.UseOpenIddict();
 });
 
@@ -54,9 +62,13 @@ builder.Services.AddOpenIddict()
         o.SetAuthorizationEndpointUris("/connect/authorize");
         o.SetTokenEndpointUris("/connect/token");
 
-        o.AllowAuthorizationCodeFlow().RequireProofKeyForCodeExchange();
+        // Refresh tokens let clients (claude.ai/ChatGPT) renew an expired access token silently
+        // instead of re-running the consent flow. Granted only when the client requests
+        // offline_access (see AuthorizationController). Default lifetimes: 1h access, 14d sliding refresh.
+        o.AllowAuthorizationCodeFlow().AllowRefreshTokenFlow().RequireProofKeyForCodeExchange();
 
-        o.RegisterScopes("mdex:read", "mdex:write-intent", "mdex:fullwrite");
+        // offline_access must be advertised so clients know to ask for a refresh token.
+        o.RegisterScopes("mdex:read", "mdex:write-intent", "mdex:fullwrite", "offline_access");
 
         // Greedy MCP clients (claude.ai) request every advertised scope. Don't reject when a client
         // asks for more than its tier — AuthorizationController clamps the grant to the client's
@@ -66,20 +78,28 @@ builder.Services.AddOpenIddict()
         o.UseAspNetCore()
             .EnableAuthorizationEndpointPassthrough();   // delegate GET/POST to our controller
 
-        // Signing key: persistent X.509 certificate so tokens survive process restarts.
+        // Signing AND encryption keys: persistent X.509 certificate so tokens survive restarts.
+        // Refresh tokens and authorization codes are always encrypted with the encryption key, so it
+        // must persist too — otherwise a restart makes stored refresh tokens undecryptable, defeating
+        // the SQLite store. The same cert serves both purposes for this single-tenant gateway.
         // Supply via MDEX_SIGNING_CERT_PATH + MDEX_SIGNING_CERT_PASS (or Mdex:SigningCert:* in config).
-        // In dev/CI, fall back to an ephemeral key when no cert is configured.
+        // In dev/CI, fall back to ephemeral keys when no cert is configured.
         var certPath = builder.Configuration["Mdex:SigningCert:Path"]
             ?? Environment.GetEnvironmentVariable("MDEX_SIGNING_CERT_PATH");
         var certPass = builder.Configuration["Mdex:SigningCert:Password"]
             ?? Environment.GetEnvironmentVariable("MDEX_SIGNING_CERT_PASS") ?? "";
         if (!string.IsNullOrWhiteSpace(certPath))
-            o.AddSigningCertificate(new X509Certificate2(certPath, certPass));
+        {
+            var cert = new X509Certificate2(certPath, certPass);
+            o.AddSigningCertificate(cert);
+            o.AddEncryptionCertificate(cert);
+        }
         else
-            o.AddEphemeralSigningKey();   // dev/CI only — tokens invalidated on restart
-
-        o.AddEphemeralEncryptionKey();      // encryption key can always be ephemeral (tokens are unencrypted)
-        o.DisableAccessTokenEncryption();   // keeps JWTs readable; required by some MCP clients
+        {
+            o.AddEphemeralSigningKey();       // dev/CI only — tokens invalidated on restart
+            o.AddEphemeralEncryptionKey();
+        }
+        o.DisableAccessTokenEncryption();   // keeps access-token JWTs readable; required by some MCP clients
     })
     .AddValidation(o =>
     {
@@ -119,6 +139,11 @@ builder.Services.Configure<ModelContextProtocol.Server.McpServerOptions>(o =>
     o.Filters.Request.ListToolsFilters.Add(RoleToolVisibility.ListToolsFilter));
 
 var app = builder.Build();
+
+// Create the OpenIddict SQLite schema if absent (before the client seed runs). No migrations —
+// the schema is fixed by OpenIddict's EF model.
+using (var initScope = app.Services.CreateScope())
+    initScope.ServiceProvider.GetRequiredService<DbContext>().Database.EnsureCreated();
 
 var fwdOptions = new ForwardedHeadersOptions
 {

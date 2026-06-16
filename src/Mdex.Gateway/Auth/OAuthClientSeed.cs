@@ -31,9 +31,14 @@ public sealed class OAuthClientSeed(
             };
 
             descriptor.Permissions.Add(Permissions.GrantTypes.AuthorizationCode);
+            descriptor.Permissions.Add(Permissions.GrantTypes.RefreshToken);
             descriptor.Permissions.Add(Permissions.ResponseTypes.Code);
             descriptor.Permissions.Add(Permissions.Endpoints.Authorization);
             descriptor.Permissions.Add(Permissions.Endpoints.Token);
+
+            // offline_access is validated against an explicit client permission even when
+            // IgnoreScopePermissions() is set — without it the refresh-token request fails (ID2065).
+            descriptor.Permissions.Add(Permissions.Prefixes.Scope + Scopes.OfflineAccess);
 
             foreach (var scope2 in cfg.Scopes)
                 descriptor.Permissions.Add(Permissions.Prefixes.Scope + scope2);

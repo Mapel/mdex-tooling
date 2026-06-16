@@ -71,6 +71,9 @@ public sealed class AuthorizationController(IOpenIddictApplicationManager appMan
             .Where(p => p.StartsWith(Permissions.Prefixes.Scope, StringComparison.Ordinal))
             .Select(p => p[Permissions.Prefixes.Scope.Length..])
             .ToHashSet(StringComparer.Ordinal);
+        // offline_access is a protocol scope (controls refresh-token issuance), not a resource
+        // tier — keep it regardless of the client's seeded scope permissions.
+        allowed.Add(Scopes.OfflineAccess);
         return requested.Where(allowed.Contains).ToArray();
     }
 
