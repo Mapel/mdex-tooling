@@ -44,6 +44,8 @@ builder.Services.AddScoped<IRoleProvider, HttpRoleProvider>();
 builder.Services.AddScoped<ToolAuthorizer>();
 
 // --- OAuth client seed ---
+// TODO(docs/TODO.md): move OAuth clients (esp. redirect URIs) out of appsettings.json into a
+// watched file like tokens.json, so changes apply at runtime without a rebuild/redeploy.
 builder.Services.Configure<List<OAuthClientConfig>>(
     builder.Configuration.GetSection("Mdex:OAuthClients"));
 builder.Services.AddHostedService<OAuthClientSeed>();
