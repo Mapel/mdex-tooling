@@ -29,6 +29,7 @@ public class AuthIntegrationTests : IDisposable
         {
             b.UseSetting("Mdex:Root", _root);
             b.UseSetting("Mdex:TokenStore", tokensOverride ?? _tokens);
+            b.UseSetting("Mdex:OpenIddictDb", Path.Combine(_root, Guid.NewGuid().ToString("N") + ".db"));
         });
 
     static HttpRequestMessage McpPost(string? rawAuthHeader)

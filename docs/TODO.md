@@ -6,7 +6,9 @@ Running list of deferred work. Newest first. Move done items to the bottom or de
 
 ## Runtime-editable OAuth client config (no rebuild/redeploy)
 
-**Status:** open — raised 2026-06-17
+**Status:** ✅ done 2026-06-17 — implemented on `feat/runtime-oauth-client-config`. Clients live in a
+watched `clients.json` synced into the OpenIddict store at boot + on change (add/update/remove, with
+an empty-config guard). See [2026-06-17-runtime-oauth-client-config.md](2026-06-17-runtime-oauth-client-config.md).
 
 **Problem.** OAuth clients (`Mdex:OAuthClients`: client id/secret, scopes, **redirect URIs**)
 live in `src/Mdex.Gateway/appsettings.json`, which is baked into the Docker image. Any change —

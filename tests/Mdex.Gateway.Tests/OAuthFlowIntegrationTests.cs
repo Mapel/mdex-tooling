@@ -43,6 +43,7 @@ public class OAuthFlowIntegrationTests : IDisposable
         {
             b.UseSetting("Mdex:Root", _root);
             b.UseSetting("Mdex:TokenStore", _tokens);
+            b.UseSetting("Mdex:OpenIddictDb", Path.Combine(_root, Guid.NewGuid().ToString("N") + ".db"));
             // Inject a test OAuth client
             b.UseSetting("Mdex:OAuthClients:0:ClientId", TestClientId);
             b.UseSetting("Mdex:OAuthClients:0:ClientSecret", TestClientSecret);
@@ -109,7 +110,7 @@ public class OAuthFlowIntegrationTests : IDisposable
         // First GET to seed the request in the OpenIddict store
         await client.GetAsync(url);
 
-        var form = new FormUrlEncodedContent([new("decision", "deny")]);
+        var form = ConsentForm(challenge, "mdex:read", "state2", "deny");
         var res = await client.PostAsync(url, form);
 
         Assert.Equal(HttpStatusCode.Redirect, res.StatusCode);
@@ -134,7 +135,7 @@ public class OAuthFlowIntegrationTests : IDisposable
         Assert.Equal(HttpStatusCode.OK, getResp.StatusCode);
 
         // 2. POST allow
-        var form = new FormUrlEncodedContent([new("decision", "allow")]);
+        var form = ConsentForm(challenge, "mdex:read", "state3", "allow");
         var postResp = await client.PostAsync(url, form, cts.Token);
         Assert.Equal(HttpStatusCode.Redirect, postResp.StatusCode);
 
@@ -230,7 +231,7 @@ public class OAuthFlowIntegrationTests : IDisposable
 
         await client.GetAsync(url, ct);
 
-        var form = new FormUrlEncodedContent([new("decision", "allow")]);
+        var form = ConsentForm(challenge, scope, "st", "allow");
         var postResp = await client.PostAsync(url, form, ct);
         var location = postResp.Headers.Location!.ToString();
         var code = ExtractQueryParam(location, "code");
@@ -247,6 +248,21 @@ public class OAuthFlowIntegrationTests : IDisposable
         var tokenResp = await client.PostAsync("/connect/token", tokenForm, ct);
         return ExtractJsonField(await tokenResp.Content.ReadAsStringAsync(ct), "access_token");
     }
+
+    // OpenIddict reads authorization parameters from the POST body (the real consent form carries
+    // them as hidden fields). Mirror that here — params in the query string alone are ignored on POST.
+    FormUrlEncodedContent ConsentForm(string challenge, string scope, string state, string decision) =>
+        new(new Dictionary<string, string>
+        {
+            ["client_id"] = TestClientId,
+            ["response_type"] = "code",
+            ["redirect_uri"] = TestRedirectUri,
+            ["code_challenge"] = challenge,
+            ["code_challenge_method"] = "S256",
+            ["scope"] = scope,
+            ["state"] = state,
+            ["decision"] = decision,
+        });
 
     static (string verifier, string challenge) MakePkce()
     {

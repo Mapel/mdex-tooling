@@ -49,6 +49,27 @@ created automatically at startup. This — together with the persistent signing/
 lets clients silently renew expired access tokens across redeploys, so claude.ai/ChatGPT don't
 re-prompt for consent. Nothing to set up beyond keeping the `tokens/` volume.
 
+## OAuth clients (runtime-editable)
+
+OAuth clients — id, secret, scopes, and **redirect URIs** — are defined in a watched `clients.json`
+on the `/tokens` volume (default `/tokens/clients.json`, override with `MDEX_OAUTH_CLIENTS`). The
+gateway syncs the file into its store at startup **and whenever the file changes**, so you can add a
+connector's callback URL or rotate a secret by editing the file — no rebuild, no restart.
+
+Start from [`clients.example.json`](clients.example.json):
+
+```bash
+cp clients.example.json tokens/clients.json   # the /tokens volume
+chmod 600 tokens/clients.json                  # holds client secrets
+# fill in real secrets / redirect URIs, then save — changes apply within ~1s
+```
+
+Notes:
+- Clients are matched and removed by `ClientId`: drop a client from the file and it's removed from
+  the store. An **empty** file is ignored (guard) so a truncated file can't wipe every client.
+- `clients.json` holds secrets — it is gitignored and must never be committed. `appsettings.json`
+  ships an empty client list; local dev defaults live in `appsettings.Development.json`.
+
 ## Verify
 
 ```bash

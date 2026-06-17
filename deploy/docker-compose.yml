@@ -37,10 +37,10 @@ services:
       LETSENCRYPT_HOST: mdex-mcp.example.com
       LETSENCRYPT_EMAIL: you@example.com
 
-      # One OAuth client per role (see README.md "OAuth 2.1 setup").
-      Mdex__OAuthClients__0__ClientSecret: "REPLACE_CLIENT_0_SECRET"
-      Mdex__OAuthClients__1__ClientSecret: "REPLACE_CLIENT_1_SECRET"
-      Mdex__OAuthClients__2__ClientSecret: "REPLACE_CLIENT_2_SECRET"
+      # OAuth clients (id/secret/scopes/redirect URIs) are defined in the watched clients.json on the
+      # /tokens volume — see deploy/README.md "OAuth clients". Edit that file to add a redirect URI or
+      # rotate a secret; changes apply at runtime, no rebuild. Optional path override:
+      # MDEX_OAUTH_CLIENTS: /tokens/clients.json
     volumes:
       - /path/to/mdex-vault:/vault         # data vault (read/write)
       - ./tokens:/tokens                   # token store (persisted)

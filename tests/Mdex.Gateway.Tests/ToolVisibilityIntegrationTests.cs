@@ -39,6 +39,7 @@ public class ToolVisibilityIntegrationTests : IDisposable
         {
             b.UseSetting("Mdex:Root", _root);
             b.UseSetting("Mdex:TokenStore", _tokens);
+            b.UseSetting("Mdex:OpenIddictDb", Path.Combine(_root, Guid.NewGuid().ToString("N") + ".db"));
         });
         var http = factory.CreateClient();
         var transport = new HttpClientTransport(new HttpClientTransportOptions

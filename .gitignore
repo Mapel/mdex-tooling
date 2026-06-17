@@ -480,3 +480,7 @@ $RECYCLE.BIN/
 
 # Vim temporary swap files
 *.swp
+
+# OAuth client config (holds client secrets) — runtime file, never commit
+clients.json
+**/clients.json

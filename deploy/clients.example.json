@@ -1,0 +1,36 @@
+{
+  "Mdex": {
+    "OAuthClients": [
+      {
+        "ClientId": "mdex-read",
+        "ClientSecret": "REPLACE_READ_SECRET",
+        "DisplayName": "mdex read",
+        "Scopes": [ "mdex:read" ],
+        "RedirectUris": [
+          "https://claude.ai/api/mcp/auth_callback",
+          "https://chatgpt.com/connector_platform_oauth_redirect"
+        ]
+      },
+      {
+        "ClientId": "mdex-write-intent",
+        "ClientSecret": "REPLACE_WRITE_INTENT_SECRET",
+        "DisplayName": "mdex write-intent",
+        "Scopes": [ "mdex:read", "mdex:write-intent" ],
+        "RedirectUris": [
+          "https://claude.ai/api/mcp/auth_callback",
+          "https://chatgpt.com/connector_platform_oauth_redirect"
+        ]
+      },
+      {
+        "ClientId": "mdex-fullwrite",
+        "ClientSecret": "REPLACE_FULLWRITE_SECRET",
+        "DisplayName": "mdex fullwrite",
+        "Scopes": [ "mdex:read", "mdex:write-intent", "mdex:fullwrite" ],
+        "RedirectUris": [
+          "https://claude.ai/api/mcp/auth_callback",
+          "https://chatgpt.com/connector_platform_oauth_redirect"
+        ]
+      }
+    ]
+  }
+}

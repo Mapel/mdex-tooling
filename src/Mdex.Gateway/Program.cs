@@ -28,6 +28,15 @@ if (string.IsNullOrWhiteSpace(openiddictDbPath))
 if (string.IsNullOrWhiteSpace(openiddictDbPath))
     openiddictDbPath = Path.Combine(Path.GetDirectoryName(Path.GetFullPath(tokenPath)) ?? ".", "openiddict.db");
 
+// OAuth clients (id/secret/scopes/redirect URIs) live in a separate watched file so they can be
+// added/changed/removed at runtime without a rebuild. Layered last (wins over appsettings, which
+// holds only dev defaults), with reloadOnChange so edits are picked up live — see OAuthClientSeed.
+var clientsPath = builder.Configuration["Mdex:OAuthClientsFile"]
+    ?? Environment.GetEnvironmentVariable("MDEX_OAUTH_CLIENTS");
+if (string.IsNullOrWhiteSpace(clientsPath))
+    clientsPath = Path.Combine(Path.GetDirectoryName(Path.GetFullPath(tokenPath)) ?? ".", "clients.json");
+builder.Configuration.AddJsonFile(clientsPath, optional: true, reloadOnChange: true);
+
 // --- shared singletons: engine, in-process backend (server vault root), token store + watcher ---
 var engine = CommandEngine.Default();
 var tokenStore = new TokenStore(tokenPath);
@@ -43,9 +52,7 @@ builder.Services.AddHttpContextAccessor();
 builder.Services.AddScoped<IRoleProvider, HttpRoleProvider>();
 builder.Services.AddScoped<ToolAuthorizer>();
 
-// --- OAuth client seed ---
-// TODO(docs/TODO.md): move OAuth clients (esp. redirect URIs) out of appsettings.json into a
-// watched file like tokens.json, so changes apply at runtime without a rebuild/redeploy.
+// --- OAuth client seed (syncs the OpenIddict store with the watched clients file at boot + on change) ---
 builder.Services.Configure<List<OAuthClientConfig>>(
     builder.Configuration.GetSection("Mdex:OAuthClients"));
 builder.Services.AddHostedService<OAuthClientSeed>();
@@ -77,8 +84,14 @@ builder.Services.AddOpenIddict()
         // allowed scopes instead. The seeded per-client scope permissions remain the allow-list.
         o.IgnoreScopePermissions();
 
-        o.UseAspNetCore()
+        var aspNetCore = o.UseAspNetCore()
             .EnableAuthorizationEndpointPassthrough();   // delegate GET/POST to our controller
+
+        // OpenIddict requires HTTPS by default. In production the gateway runs behind a TLS-terminating
+        // reverse proxy and sees HTTPS via forwarded headers, so the requirement holds. In dev/CI/tests
+        // it runs over plain HTTP — relax the requirement there only.
+        if (builder.Environment.IsDevelopment())
+            aspNetCore.DisableTransportSecurityRequirement();
 
         // Signing AND encryption keys: persistent X.509 certificate so tokens survive restarts.
         // Refresh tokens and authorization codes are always encrypted with the encryption key, so it

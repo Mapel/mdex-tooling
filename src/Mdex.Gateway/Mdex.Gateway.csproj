@@ -9,7 +9,10 @@
     <PackageReference Include="ModelContextProtocol.AspNetCore" Version="1.4.0" />
     <PackageReference Include="OpenIddict.AspNetCore" Version="5.4.0" />
     <PackageReference Include="OpenIddict.EntityFrameworkCore" Version="5.4.0" />
-    <PackageReference Include="Microsoft.EntityFrameworkCore.Sqlite" Version="9.0.5" />
+    <!-- EF Core pinned to 8.x to match OpenIddict 5.4.0 (its highest target is net8.0/EF 8). EF 9
+         moved ExecuteDeleteAsync out of RelationalQueryableExtensions, which breaks OpenIddict's
+         client DeleteAsync path (used when removing clients dropped from the config). -->
+    <PackageReference Include="Microsoft.EntityFrameworkCore.Sqlite" Version="8.0.11" />
   </ItemGroup>
 
   <PropertyGroup>

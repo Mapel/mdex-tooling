@@ -4,54 +4,126 @@ using static OpenIddict.Abstractions.OpenIddictConstants;
 
 namespace Mdex.Gateway.Auth;
 
-/// <summary>Idempotent startup seed: ensures each configured OAuth client exists in the OpenIddict
-/// store. Runs as IHostedService so EF Core stores are ready. Safe to re-run on every boot —
-/// existing clients are updated, new ones are created.</summary>
+/// <summary>Keeps the OpenIddict application store in sync with the OAuth client config. Syncs once at
+/// startup and again whenever the watched config file (clients.json) changes, so clients — including
+/// redirect URIs — can be added, changed, or removed at runtime without a rebuild or restart.
+/// <para>The sync is idempotent: configured clients are created or updated, and clients absent from
+/// the config are removed. A guard skips removal when the configured set is empty, so a truncated or
+/// unreadable file can never wipe every client and lock everyone out. A bad reload is logged and
+/// leaves the running store untouched.</para></summary>
 public sealed class OAuthClientSeed(
     IServiceProvider services,
-    IOptions<List<OAuthClientConfig>> clientOptions) : IHostedService
+    IOptionsMonitor<List<OAuthClientConfig>> clients,
+    ILogger<OAuthClientSeed> log) : IHostedService, IDisposable
 {
+    readonly SemaphoreSlim _sync = new(1, 1);   // serialize syncs — concurrent SQLite writers would clash
+    readonly Lock _gate = new();
+    IDisposable? _onChange;
+    Timer? _debounce;
+
     public async Task StartAsync(CancellationToken ct)
     {
-        // OpenIddict managers are scoped — must resolve in a scope
-        using var scope = services.CreateScope();
-        var manager = scope.ServiceProvider.GetRequiredService<IOpenIddictApplicationManager>();
+        await RunSyncAsync(clients.CurrentValue, ct);
+        // Re-sync on config-file change, debounced (a single save can fire several reload events).
+        _onChange = clients.OnChange(_ => ScheduleSync());
+    }
 
-        foreach (var cfg in clientOptions.Value)
+    void ScheduleSync()
+    {
+        lock (_gate)
         {
-            var existing = await manager.FindByClientIdAsync(cfg.ClientId, ct);
-
-            var descriptor = new OpenIddictApplicationDescriptor
+            _debounce?.Dispose();
+            _debounce = new Timer(async _ =>
             {
-                ClientId = cfg.ClientId,
-                ClientSecret = cfg.ClientSecret,
-                DisplayName = cfg.DisplayName,
-                ClientType = ClientTypes.Confidential,
-                ConsentType = ConsentTypes.Explicit,
-            };
-
-            descriptor.Permissions.Add(Permissions.GrantTypes.AuthorizationCode);
-            descriptor.Permissions.Add(Permissions.GrantTypes.RefreshToken);
-            descriptor.Permissions.Add(Permissions.ResponseTypes.Code);
-            descriptor.Permissions.Add(Permissions.Endpoints.Authorization);
-            descriptor.Permissions.Add(Permissions.Endpoints.Token);
-
-            // offline_access is validated against an explicit client permission even when
-            // IgnoreScopePermissions() is set — without it the refresh-token request fails (ID2065).
-            descriptor.Permissions.Add(Permissions.Prefixes.Scope + Scopes.OfflineAccess);
-
-            foreach (var scope2 in cfg.Scopes)
-                descriptor.Permissions.Add(Permissions.Prefixes.Scope + scope2);
-
-            foreach (var uri in cfg.RedirectUris)
-                descriptor.RedirectUris.Add(new Uri(uri));
-
-            if (existing is null)
-                await manager.CreateAsync(descriptor, ct);
-            else
-                await manager.UpdateAsync(existing, descriptor, ct);
+                try { await RunSyncAsync(clients.CurrentValue, CancellationToken.None); }
+                catch (Exception ex) { log.LogError(ex, "OAuth client re-sync failed; keeping current clients."); }
+            }, null, 300, Timeout.Infinite);
         }
     }
 
-    public Task StopAsync(CancellationToken ct) => Task.CompletedTask;
+    async Task RunSyncAsync(IReadOnlyList<OAuthClientConfig> configured, CancellationToken ct)
+    {
+        await _sync.WaitAsync(ct);
+        try
+        {
+            // OpenIddict managers are scoped — resolve inside a fresh scope each run.
+            using var scope = services.CreateScope();
+            var manager = scope.ServiceProvider.GetRequiredService<IOpenIddictApplicationManager>();
+
+            foreach (var cfg in configured)
+            {
+                var descriptor = BuildDescriptor(cfg);
+                var existing = await manager.FindByClientIdAsync(cfg.ClientId, ct);
+                if (existing is null)
+                    await manager.CreateAsync(descriptor, ct);
+                else
+                    await manager.UpdateAsync(existing, descriptor, ct);
+            }
+
+            // Remove clients no longer in the config — but never when it's empty, which signals a
+            // truncated/unreadable file and must not delete every client.
+            if (configured.Count == 0)
+            {
+                log.LogWarning("OAuth client config is empty; skipping removal to avoid lockout.");
+                return;
+            }
+
+            var keep = configured.Select(c => c.ClientId).ToHashSet(StringComparer.Ordinal);
+            await foreach (var app in manager.ListAsync(cancellationToken: ct))
+            {
+                var id = await manager.GetClientIdAsync(app, ct);
+                if (id is not null && !keep.Contains(id))
+                {
+                    await manager.DeleteAsync(app, ct);
+                    log.LogInformation("Removed OAuth client no longer in config: {ClientId}", id);
+                }
+            }
+        }
+        finally
+        {
+            _sync.Release();
+        }
+    }
+
+    static OpenIddictApplicationDescriptor BuildDescriptor(OAuthClientConfig cfg)
+    {
+        var descriptor = new OpenIddictApplicationDescriptor
+        {
+            ClientId = cfg.ClientId,
+            ClientSecret = cfg.ClientSecret,
+            DisplayName = cfg.DisplayName,
+            ClientType = ClientTypes.Confidential,
+            ConsentType = ConsentTypes.Explicit,
+        };
+
+        descriptor.Permissions.Add(Permissions.GrantTypes.AuthorizationCode);
+        descriptor.Permissions.Add(Permissions.GrantTypes.RefreshToken);
+        descriptor.Permissions.Add(Permissions.ResponseTypes.Code);
+        descriptor.Permissions.Add(Permissions.Endpoints.Authorization);
+        descriptor.Permissions.Add(Permissions.Endpoints.Token);
+
+        // offline_access is validated against an explicit client permission even when
+        // IgnoreScopePermissions() is set — without it the refresh-token request fails (ID2065).
+        descriptor.Permissions.Add(Permissions.Prefixes.Scope + Scopes.OfflineAccess);
+
+        foreach (var scope in cfg.Scopes)
+            descriptor.Permissions.Add(Permissions.Prefixes.Scope + scope);
+
+        foreach (var uri in cfg.RedirectUris)
+            descriptor.RedirectUris.Add(new Uri(uri));
+
+        return descriptor;
+    }
+
+    public Task StopAsync(CancellationToken ct)
+    {
+        Dispose();
+        return Task.CompletedTask;
+    }
+
+    public void Dispose()
+    {
+        _onChange?.Dispose();
+        lock (_gate) _debounce?.Dispose();
+    }
 }
