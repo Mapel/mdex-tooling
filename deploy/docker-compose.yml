@@ -41,8 +41,21 @@ services:
       # /tokens volume — see deploy/README.md "OAuth clients". Edit that file to add a redirect URI or
       # rotate a secret; changes apply at runtime, no rebuild. Optional path override:
       # MDEX_OAUTH_CLIENTS: /tokens/clients.json
+      # git identity + safe.directory for the commit_and_push tool (shells out to git in /vault).
+      GIT_AUTHOR_NAME: "Your Name"
+      GIT_AUTHOR_EMAIL: "you@example.com"
+      GIT_COMMITTER_NAME: "Your Name"
+      GIT_COMMITTER_EMAIL: "you@example.com"
+      GIT_CONFIG_COUNT: "2"
+      GIT_CONFIG_KEY_0: "safe.directory"
+      GIT_CONFIG_VALUE_0: "/vault"
+      GIT_CONFIG_KEY_1: "safe.directory"
+      GIT_CONFIG_VALUE_1: "/path/to/vault-origin-remote"
     volumes:
       - /path/to/mdex-vault:/vault         # data vault (read/write)
+      # If the vault's 'origin' remote is a local path (e.g. a bare repo), mount it at the SAME
+      # path so commit_and_push can pull/push. Omit if origin is a remote URL with creds available.
+      # - /path/to/vault-origin-remote:/path/to/vault-origin-remote
       - ./tokens:/tokens                   # token store (persisted)
       - ./certs:/certs:ro                  # signing cert (read-only)
     networks: [proxy]
