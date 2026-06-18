@@ -151,7 +151,11 @@ builder.Services.AddMcpServer()
 
 // --- visibility: hide tools above the caller's (per-token) role from tools/list ---
 builder.Services.Configure<ModelContextProtocol.Server.McpServerOptions>(o =>
-    o.Filters.Request.ListToolsFilters.Add(RoleToolVisibility.ListToolsFilter));
+{
+    o.Filters.Request.ListToolsFilters.Add(RoleToolVisibility.ListToolsFilter);
+    // tolerate CSV strings for array params (clients that flatten the array schema, e.g. Langdock)
+    o.Filters.Request.CallToolFilters.Add(ArrayArgNormalizer.CallToolFilter);
+});
 
 var app = builder.Build();
 
