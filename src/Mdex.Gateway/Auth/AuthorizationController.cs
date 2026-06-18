@@ -71,9 +71,13 @@ public sealed class AuthorizationController(IOpenIddictApplicationManager appMan
             .Where(p => p.StartsWith(Permissions.Prefixes.Scope, StringComparison.Ordinal))
             .Select(p => p[Permissions.Prefixes.Scope.Length..])
             .ToHashSet(StringComparer.Ordinal);
-        // offline_access is a protocol scope (controls refresh-token issuance), not a resource
-        // tier — keep it regardless of the client's seeded scope permissions.
+        // openid and offline_access are protocol/identity scopes, not resource tiers — always grant
+        // them when requested, regardless of the client's seeded scope permissions. offline_access
+        // controls refresh-token issuance; openid is advertised by the AS, and greedy clients (e.g.
+        // Langdock) request it and warn when it isn't granted. Neither widens mdex resource access:
+        // OAuthScopeClaimsTransformer derives the role only from the mdex:* scopes.
         allowed.Add(Scopes.OfflineAccess);
+        allowed.Add(Scopes.OpenId);
         return requested.Where(allowed.Contains).ToArray();
     }
 
