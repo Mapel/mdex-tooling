@@ -31,6 +31,17 @@ public class CreateCommandTests
     }
 
     [Fact]
+    public void Applies_passed_tags_to_frontmatter()
+    {
+        using var v = new TestVault();
+        var path = new CreateCommand()
+            .Run(new[] { "area", "tagged", "--tag", "nixos", "--tag", "architecture" }, Ctx(v))
+            .Data().GetProperty("path").GetString();
+        var text = File.ReadAllText(Path.Combine(v.Root, path!));
+        Assert.Contains("tags: [nixos, architecture]", text);
+    }
+
+    [Fact]
     public void Refuses_inbox()
     {
         using var v = new TestVault();

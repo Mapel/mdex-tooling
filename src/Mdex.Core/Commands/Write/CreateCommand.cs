@@ -7,7 +7,7 @@ namespace Mdex.Core.Commands.Write;
 public sealed class CreateCommand : ICommand
 {
     public string Name => "create";
-    public string Usage => "create <type> <name> [--no-body] [--body <tpl>]";
+    public string Usage => "create <type> <name> [--no-body] [--body <tpl>] [--tag X...]";
     public string Summary => "Create a note (type: zettel|project|area|reference).";
 
     static readonly Dictionary<string, string> BaseDirs = new()
@@ -29,6 +29,7 @@ public sealed class CreateCommand : ICommand
         var name = reader.Positional(1) ?? throw new CommandException($"create {type} needs a name");
         var noBody = reader.Has("--no-body");
         var bodyTpl = reader.Flag("--body");
+        var tags = reader.Multi("--tag");
 
         var (relDir, slug) = ResolveTarget(baseDir, name, allowSubpath: type != "zettel");
         var rel = $"{relDir}/{slug}.md";
@@ -39,6 +40,7 @@ public sealed class CreateCommand : ICommand
         var now = DateTime.Now;
         var text = ctx.Templates.BuildNote(type, slug, includeBody: !noBody,
             created: now.ToString("yyyy-MM-ddTHH:mm:ss"), modified: now.ToString("yyyy-MM-dd"), bodyTemplate: bodyTpl);
+        if (tags.Count > 0) text = FrontmatterEditor.SetTags(text, tags);   // template seeds tags: []; apply any passed --tag
         File.WriteAllText(abs, text, new UTF8Encoding(false));
 
         return CommandResult.Of(new { path = rel, slug, type }, $"✓ {rel}");
