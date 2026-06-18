@@ -7,7 +7,7 @@ namespace Mdex.Core.Commands.Write;
 public sealed class CreateCommand : ICommand
 {
     public string Name => "create";
-    public string Usage => "create <type> <name> [--no-body] [--body <tpl>] [--tag X...]";
+    public string Usage => "create <type> <name> [--body-template <tpl>] [--tag X...]";
     public string Summary => "Create a note (type: zettel|project|area|reference).";
 
     static readonly Dictionary<string, string> BaseDirs = new()
@@ -27,8 +27,7 @@ public sealed class CreateCommand : ICommand
             throw new CommandException($"unknown type '{type}'. Valid: zettel | project | area | reference");
 
         var name = reader.Positional(1) ?? throw new CommandException($"create {type} needs a name");
-        var noBody = reader.Has("--no-body");
-        var bodyTpl = reader.Flag("--body");
+        var bodyTpl = reader.Flag("--body-template");   // opt-in; no template by default for any type
         var tags = reader.Multi("--tag");
 
         var (relDir, slug) = ResolveTarget(baseDir, name, allowSubpath: type != "zettel");
@@ -38,7 +37,7 @@ public sealed class CreateCommand : ICommand
         Directory.CreateDirectory(Path.GetDirectoryName(abs)!);
 
         var now = DateTime.Now;
-        var text = ctx.Templates.BuildNote(type, slug, includeBody: !noBody,
+        var text = ctx.Templates.BuildNote(type, slug, includeBody: true,
             created: now.ToString("yyyy-MM-ddTHH:mm:ss"), modified: now.ToString("yyyy-MM-dd"), bodyTemplate: bodyTpl);
         if (tags.Count > 0) text = FrontmatterEditor.SetTags(text, tags);   // template seeds tags: []; apply any passed --tag
         File.WriteAllText(abs, text, new UTF8Encoding(false));

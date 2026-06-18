@@ -20,6 +20,7 @@ public static class CommandFactory
         r.Add(new ListCommand());
         r.Add(new FindRelatedCommand());
         r.Add(new ListTodosCommand());
+        r.Add(new ListTemplatesCommand());
 
         // Write / intent commands (convention-preserving)
         r.Add(new CaptureInboxCommand());

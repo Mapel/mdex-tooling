@@ -13,8 +13,8 @@ public class ToolGateGuardTests
             .Where(m => m.GetCustomAttribute<McpServerToolAttribute>() is not null);
 
     [Fact]
-    public void There_are_twenty_tools()   // 7 read + 11 intent + 2 raw-fs
-        => Assert.Equal(20, Tools().Count());
+    public void There_are_twentyone_tools()   // 8 read + 11 intent + 2 raw-fs
+        => Assert.Equal(21, Tools().Count());
 
     [Fact]
     public void Every_tool_declares_a_minimum_role()

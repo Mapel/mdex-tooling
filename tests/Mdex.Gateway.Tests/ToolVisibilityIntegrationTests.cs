@@ -58,7 +58,7 @@ public class ToolVisibilityIntegrationTests : IDisposable
         using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(30));
         var names = await ListToolNamesAsync(ReadToken, cts.Token);
 
-        Assert.Equal(7, names.Length);
+        Assert.Equal(8, names.Length);
         Assert.Contains("search", names);
         Assert.DoesNotContain("capture_inbox", names);
         Assert.DoesNotContain("write_file", names);
@@ -70,7 +70,7 @@ public class ToolVisibilityIntegrationTests : IDisposable
         using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(30));
         var names = await ListToolNamesAsync(IntentToken, cts.Token);
 
-        Assert.Equal(18, names.Length);
+        Assert.Equal(19, names.Length);
         Assert.Contains("capture_inbox", names);
         Assert.DoesNotContain("delete", names);
     }
@@ -81,6 +81,6 @@ public class ToolVisibilityIntegrationTests : IDisposable
         using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(30));
         var names = await ListToolNamesAsync(FullToken, cts.Token);
 
-        Assert.Equal(20, names.Length);
+        Assert.Equal(21, names.Length);
     }
 }

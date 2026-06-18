@@ -12,8 +12,9 @@ public class RoleToolVisibilityTests
     {
         var map = RoleToolVisibility.MinRoleByName;
 
-        Assert.Equal(20, map.Count);                       // 7 read + 11 intent + 2 raw-fs
+        Assert.Equal(21, map.Count);                       // 8 read + 11 intent + 2 raw-fs
         Assert.Equal(Role.Read, map["search"]);
+        Assert.Equal(Role.Read, map["list_templates"]);
         Assert.Equal(Role.Read, map["list_tags"]);
         Assert.Equal(Role.Read, map["find_notes"]);
         Assert.Equal(Role.Read, map["list_todos"]);
@@ -39,10 +40,10 @@ public class RoleToolVisibilityTests
     }
 
     [Fact]
-    public void Read_role_sees_only_the_seven_read_tools()
+    public void Read_role_sees_only_the_eight_read_tools()
     {
         var names = NamesAfter(Role.Read);
-        Assert.Equal(7, names.Length);
+        Assert.Equal(8, names.Length);
         Assert.Contains("search", names);
         Assert.DoesNotContain("capture_inbox", names);   // write-intent hidden
         Assert.DoesNotContain("write_file", names);      // fullwrite hidden
@@ -52,7 +53,7 @@ public class RoleToolVisibilityTests
     public void WriteIntent_role_sees_read_and_intent_but_not_raw_fs()
     {
         var names = NamesAfter(Role.WriteIntent);
-        Assert.Equal(18, names.Length);                  // 7 read + 11 intent
+        Assert.Equal(19, names.Length);                  // 8 read + 11 intent
         Assert.Contains("capture_inbox", names);
         Assert.Contains("move", names);                  // pulled up from fullwrite
         Assert.DoesNotContain("delete", names);          // fullwrite hidden
@@ -61,7 +62,7 @@ public class RoleToolVisibilityTests
     [Fact]
     public void FullWrite_role_sees_every_tool()
     {
-        Assert.Equal(20, NamesAfter(Role.FullWrite).Length);
+        Assert.Equal(21, NamesAfter(Role.FullWrite).Length);
     }
 
     [Fact]

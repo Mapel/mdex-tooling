@@ -42,6 +42,33 @@ public class CreateCommandTests
     }
 
     [Fact]
+    public void Project_without_body_template_has_no_body()
+    {
+        using var v = new TestVault();
+        var path = new CreateCommand().Run(new[] { "project", "p1" }, Ctx(v))
+            .Data().GetProperty("path").GetString();
+        Assert.DoesNotContain("## Ziel", v.Read(path!));   // project-default no longer auto-applied
+    }
+
+    [Fact]
+    public void Body_template_is_applied_when_named()
+    {
+        using var v = new TestVault();
+        var path = new CreateCommand().Run(new[] { "project", "p2", "--body-template", "project-default" }, Ctx(v))
+            .Data().GetProperty("path").GetString();
+        Assert.Contains("## Ziel", v.Read(path!));
+    }
+
+    [Fact]
+    public void Unknown_body_template_reports_available()
+    {
+        using var v = new TestVault();
+        var ex = Assert.Throws<CommandException>(() =>
+            new CreateCommand().Run(new[] { "area", "x", "--body-template", "nope" }, Ctx(v)));
+        Assert.Contains("Available: project-default", ex.Message);
+    }
+
+    [Fact]
     public void Refuses_inbox()
     {
         using var v = new TestVault();

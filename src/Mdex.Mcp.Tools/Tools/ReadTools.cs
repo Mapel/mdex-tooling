@@ -20,6 +20,13 @@ public static class ReadTools
         return mdex.Call("search", args.ToArray());
     }
 
+    [McpServerTool, MinRole(Role.Read), Description("List available body templates (name + content). Call before passing bodyTemplate to create, to learn the valid names and follow a note-type's convention.")]
+    public static object? ListTemplates(MdexBackend mdex, ToolAuthorizer auth)
+    {
+        auth.Require(Role.Read);
+        return mdex.Call("list-templates");
+    }
+
     [McpServerTool, MinRole(Role.Read), Description("Return one or more notes by slug or vault-relative path. Partial success: missing targets are listed under errors.")]
     public static object? ReadNote(MdexBackend mdex, ToolAuthorizer auth,
         [Description("One or more note slugs or vault-relative paths")] string[] targets)

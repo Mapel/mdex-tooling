@@ -21,13 +21,11 @@ public static class IntentTools
         [Description("Type: zettel | project | area | reference")] string type,
         [Description("Note name (may include a subfolder for non-zettel types)")] string name,
         [Description("Initial tags")] string[]? tags = null,
-        [Description("Omit the body template")] bool noBody = false,
-        [Description("Named body template override, or null for the default")] string? body = null)
+        [Description("Optional body skeleton: a template name from list_templates (e.g. area, project-default). Omit for an empty body — the usual choice, since you normally write the body via replace_body/append_to_note.")] string? bodyTemplate = null)
     {
         auth.Require(Role.WriteIntent);
         var args = new List<string>();
-        if (noBody) args.Add("--no-body");
-        if (body is not null) args.Add($"--body={body}");
+        if (bodyTemplate is not null) args.Add($"--body-template={bodyTemplate}");
         foreach (var t in tags ?? Array.Empty<string>()) { args.Add("--tag"); args.Add(t); }
         args.Add("--");
         args.Add(type);
