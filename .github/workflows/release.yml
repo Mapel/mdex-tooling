@@ -1,0 +1,59 @@
+name: release
+
+# Baut mdex-cli und mdex-mcp als self-contained linux-x64 Binaries und hängt sie
+# als Tarballs an das GitHub-Release des Tags. Konsumiert wird das von der NixOS-Config
+# (pkgs/mdex-tooling) via fetchurl + autoPatchelfHook.
+#
+# Auslöser: Tag-Push v* (z.B. `git tag v0.1.0 && git push origin v0.1.0`).
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+permissions:
+  contents: write   # nötig zum Anlegen/Aktualisieren des Releases + Asset-Upload
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        tool:
+          - { name: mdex-cli, project: src/Mdex.Cli }
+          - { name: mdex-mcp, project: src/Mdex.Mcp }
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '10.0.x'
+
+      - name: Version aus Tag ableiten (v0.1.0 -> 0.1.0)
+        id: ver
+        run: echo "version=${GITHUB_REF_NAME#v}" >> "$GITHUB_OUTPUT"
+
+      # self-contained, UNTRIMMED, KEIN single-file:
+      #  - untrimmed, weil YamlDotNet (Frontmatter) reflectionbasiert ist (siehe docs/TODO.md)
+      #  - kein single-file, damit autoPatchelfHook in Nix die nativen .so patchen kann
+      - name: Publish (self-contained linux-x64)
+        run: >
+          dotnet publish ${{ matrix.tool.project }}
+          --configuration Release
+          --runtime linux-x64
+          --self-contained true
+          -p:Version=${{ steps.ver.outputs.version }}
+          -p:PublishSingleFile=false
+          -p:PublishTrimmed=false
+          --output publish/${{ matrix.tool.name }}
+
+      - name: Tarball packen
+        run: >
+          tar -czf ${{ matrix.tool.name }}-linux-x64.tar.gz
+          -C publish/${{ matrix.tool.name }} .
+
+      - name: An Release anhängen
+        uses: softprops/action-gh-release@v2
+        with:
+          files: ${{ matrix.tool.name }}-linux-x64.tar.gz
+          fail_on_unmatched_files: true

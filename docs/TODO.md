@@ -4,6 +4,40 @@ Running list of deferred work. Newest first. Move done items to the bottom or de
 
 ---
 
+## Drop YamlDotNet from frontmatter parsing (unblocks Native AOT)
+
+**Status:** open — noted 2026-06-28 while planning self-contained Nix deployment of `mdex-cli`/`mdex-mcp`.
+
+**Problem.** `src/Mdex.Core/Vault/FrontmatterParser.cs` is the *only* place YamlDotNet is used in the
+whole codebase (no serializer, no `--yaml` output, MCP output is all `System.Text.Json`). It pulls in
+the full reflection-based YamlDotNet 18 just to deserialize a flat `Dictionary<string, object?>` and
+then hand-pick `type`/`created`/`modified`/`tags`. The frontmatter schema is **fixed**, so the generic
+reflection machinery is pure overkill — the reflection comes from the library being general-purpose,
+not from the problem.
+
+**Why it matters.** YamlDotNet's default `DeserializerBuilder` is reflection-based and not
+trim/AOT-annotated. That blocks **Native AOT** and trimmed publishes, which would otherwise give a
+small, fast, fully self-contained single binary (ideal for the Nix/NixOS distribution). Right now we
+ship untrimmed self-contained (~70–90 MB) specifically to keep YamlDotNet's reflection working.
+Secondary: a fixed schema deserves an explicit parser, not a general YAML engine.
+
+**Proposed approach.**
+- Remove the `YamlDotNet` PackageReference from `src/Mdex.Core/Mdex.Core.csproj`.
+- Replace `FromYaml` with a small reflection-free parser for the known keys: scalar `type`/`created`/
+  `modified`, list-or-scalar `tags` (both `[a, b]` flow and `- a` block form), pass-through `extra`.
+  Cover the real edge cases: quoted strings, `#` comments, empty values, CRLF (already normalized).
+- Keep `ParseResult`/`Frontmatter` shape unchanged so nothing downstream moves.
+- Add focused unit tests for the parser (round-trip against the existing vault's frontmatter variants).
+
+**Acceptance.** `YamlDotNet` no longer appears anywhere in the build; existing frontmatter behaviour
+is unchanged (tests green against real notes); `dotnet publish -r linux-x64 -p:PublishAot=true`
+produces no trim/AOT warnings originating from frontmatter parsing.
+
+**Touch points.** `src/Mdex.Core/Vault/FrontmatterParser.cs`, `src/Mdex.Core/Mdex.Core.csproj`,
+new tests under `tests/Mdex.Core.Tests/`.
+
+---
+
 ## Runtime-editable OAuth client config (no rebuild/redeploy)
 
 **Status:** ✅ done 2026-06-17 — implemented on `feat/runtime-oauth-client-config`. Clients live in a
