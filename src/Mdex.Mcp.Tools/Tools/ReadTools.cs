@@ -7,7 +7,7 @@ namespace Mdex.Mcp.Tools.Tools;
 [McpServerToolType]
 public static class ReadTools
 {
-    [McpServerTool, MinRole(Role.Read), Description("Full-text substring search over note titles and bodies; one hit per note. Whitespace tokenises into terms (--match all=default | any).")]
+    [McpServerTool, MinRole(Role.Read), Description("Full-text substring search across the whole vault: note titles/bodies plus other text files (html, txt, code, config…) and every file/folder name. Binary and oversized files match by name only. One hit per file. Whitespace tokenises into terms (--match all=default | any).")]
     public static object? Search(MdexBackend mdex, ToolAuthorizer auth,
         [Description("Search query (whitespace splits into terms)")] string query,
         [Description("Term match mode: all (default) or any")] string? match = null)
@@ -27,9 +27,9 @@ public static class ReadTools
         return mdex.Call("list-templates");
     }
 
-    [McpServerTool, MinRole(Role.Read), Description("Return one or more notes by slug or vault-relative path. Partial success: missing targets are listed under errors.")]
+    [McpServerTool, MinRole(Role.Read), Description("Return one or more notes (markdown: frontmatter + body) or any other text file, by slug or vault-relative path. Binary files are refused. Partial success: missing/binary targets are listed under errors.")]
     public static object? ReadNote(MdexBackend mdex, ToolAuthorizer auth,
-        [Description("One or more note slugs or vault-relative paths")] string[] targets)
+        [Description("One or more note slugs, or vault-relative paths to any text file")] string[] targets)
     {
         auth.Require(Role.Read);
         var args = new List<string> { "--" };

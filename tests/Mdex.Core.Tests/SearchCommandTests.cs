@@ -49,4 +49,43 @@ public class SearchCommandTests
         v.WriteNote("zettel/b.md", "---\ntype: zettel\n---\n\n# B\n\nNur Emergenz hier.\n");
         Assert.Equal(2, Hits(new SearchCommand().Run(new[] { "Emergenz", "Komplexität", "--match", "any" }, Ctx(v))));
     }
+
+    [Fact]
+    public void Searches_non_markdown_text_content()
+    {
+        using var v = new TestVault();
+        v.WriteNote("resources/page.html", "<html><body>Widgets everywhere</body></html>");
+        var d = new SearchCommand().Run(new[] { "Widgets" }, Ctx(v)).Data();
+        Assert.Equal(1, d.GetProperty("hits").GetArrayLength());
+        var hit = d.GetProperty("hits")[0];
+        Assert.Equal("resources/page.html", hit.GetProperty("path").GetString());
+        Assert.False(hit.TryGetProperty("slug", out _));   // non-note file → no slug
+    }
+
+    [Fact]
+    public void Matches_files_and_folders_by_name()
+    {
+        using var v = new TestVault();
+        v.WriteNote("projects/quantum-notes/todo.txt", "nothing relevant here");
+        // 'quantum' appears only in the folder name, never in the content
+        Assert.Equal(1, Hits(new SearchCommand().Run(new[] { "quantum" }, Ctx(v))));
+    }
+
+    [Fact]
+    public void Binary_extension_matches_by_name_only()
+    {
+        using var v = new TestVault();
+        v.WriteNote("resources/diagram.png", "\0\0secretword\0");
+        Assert.Equal(1, Hits(new SearchCommand().Run(new[] { "diagram" }, Ctx(v))));      // name
+        Assert.Equal(0, Hits(new SearchCommand().Run(new[] { "secretword" }, Ctx(v))));   // never content
+    }
+
+    [Fact]
+    public void Text_extension_with_nul_bytes_is_treated_binary()
+    {
+        using var v = new TestVault();
+        v.WriteNote("resources/data.json", "\0\0binarypayload");   // .json is whitelisted, but NUL wins
+        Assert.Equal(1, Hits(new SearchCommand().Run(new[] { "data" }, Ctx(v))));           // name
+        Assert.Equal(0, Hits(new SearchCommand().Run(new[] { "binarypayload" }, Ctx(v))));  // not content
+    }
 }

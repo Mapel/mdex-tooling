@@ -6,7 +6,7 @@ public sealed class ReadNoteCommand : ICommand
 {
     public string Name => "read-note";
     public string Usage => "read-note <target>...";
-    public string Summary => "Print one or more notes' frontmatter and body (partial success).";
+    public string Summary => "Print one or more notes (or any text file) by slug or path (partial success).";
 
     public CommandResult Run(string[] args, CliContext ctx)
     {
@@ -22,6 +22,31 @@ public sealed class ReadNoteCommand : ICommand
 
         foreach (var key in targets)
         {
+            // Direct file hit (any extension) inside the vault. Non-.md text files are returned raw;
+            // binary files (or images wearing a text extension) are refused, not dumped. A .md hit
+            // that reads as text falls through to the note model below for frontmatter parsing.
+            if (ctx.Repo.TryReadFile(key, out var rel, out var content, out var binary))
+            {
+                if (binary)
+                {
+                    var msg = $"binary file, not shown: {rel}";
+                    firstFailure ??= new CommandException(msg);
+                    errors.Add(new { target = key, message = msg });
+                    errorLines.Add($"! {key}: {msg}");
+                    continue;
+                }
+                if (!rel.EndsWith(".md", StringComparison.OrdinalIgnoreCase))
+                {
+                    notes.Add(new
+                    {
+                        path = rel, slug = (string?)null, title = Path.GetFileName(rel),
+                        frontmatter = (object?)null, body = content ?? "",
+                    });
+                    bodies.Add(content ?? "");
+                    continue;
+                }
+            }
+
             try
             {
                 var note = Resolver.Single(ctx, key, $"note not found: {key}");

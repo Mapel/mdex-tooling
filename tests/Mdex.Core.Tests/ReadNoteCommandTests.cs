@@ -79,4 +79,35 @@ public class ReadNoteCommandTests
         var d = new ReadNoteCommand().Run(new[] { "projects/b/index.md" }, Ctx(v)).Data();
         Assert.Contains("Beta", d.GetProperty("notes")[0].GetProperty("body").GetString());
     }
+
+    [Fact]
+    public void Reads_non_markdown_text_file_by_path()
+    {
+        using var v = new TestVault();
+        v.WriteNote("resources/notes.txt", "plain text body");
+        var note = new ReadNoteCommand().Run(new[] { "resources/notes.txt" }, Ctx(v)).Data()
+            .GetProperty("notes")[0];
+        Assert.Equal("resources/notes.txt", note.GetProperty("path").GetString());
+        Assert.Contains("plain text body", note.GetProperty("body").GetString());
+        Assert.False(note.TryGetProperty("slug", out _));        // raw file → no slug
+        Assert.False(note.TryGetProperty("frontmatter", out _)); // raw file → no frontmatter
+    }
+
+    [Fact]
+    public void Refuses_binary_file()
+    {
+        using var v = new TestVault();
+        v.WriteNote("resources/img.png", "\0\0\0");
+        var ex = Assert.Throws<CommandException>(() => new ReadNoteCommand().Run(new[] { "resources/img.png" }, Ctx(v)));
+        Assert.Contains("binary", ex.Message);
+    }
+
+    [Fact]
+    public void Refuses_image_wearing_markdown_extension()
+    {
+        using var v = new TestVault();
+        v.WriteNote("zettel/fake.md", "\0\0PNGDATA");   // NUL-byte safeguard catches the mislabel
+        var ex = Assert.Throws<CommandException>(() => new ReadNoteCommand().Run(new[] { "zettel/fake.md" }, Ctx(v)));
+        Assert.Contains("binary", ex.Message);
+    }
 }
