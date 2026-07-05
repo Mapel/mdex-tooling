@@ -14,6 +14,8 @@ public sealed class AuthorizationController(IOpenIddictApplicationManager appMan
     /// <summary>Authorization endpoint — GET shows the consent page, POST processes the decision.</summary>
     [HttpGet("~/connect/authorize")]
     [HttpPost("~/connect/authorize")]
+    [HttpGet("~/authorize")]
+    [HttpPost("~/authorize")]
     [IgnoreAntiforgeryToken]
     public async Task<IActionResult> Authorize()
     {
@@ -56,8 +58,11 @@ public sealed class AuthorizationController(IOpenIddictApplicationManager appMan
         // GET — show the consent form with the effective (clamped) scopes
         var displayName = await appManager.GetDisplayNameAsync(app) ?? request.ClientId!;
 
+        // Post the consent decision back to the same endpoint path the client entered on
+        // (/connect/authorize or the /authorize alias), so the flow doesn't hop paths mid-way.
         return Content(
-            BuildConsentHtml(displayName, effectiveScopes, Request.QueryString.Value ?? ""),
+            BuildConsentHtml(displayName, effectiveScopes, Request.QueryString.Value ?? "",
+                Request.Path.Value ?? "/connect/authorize"),
             "text/html");
     }
 
@@ -81,10 +86,11 @@ public sealed class AuthorizationController(IOpenIddictApplicationManager appMan
         return requested.Where(allowed.Contains).ToArray();
     }
 
-    static string BuildConsentHtml(string appName, IEnumerable<string> scopes, string queryString)
+    static string BuildConsentHtml(string appName, IEnumerable<string> scopes, string queryString, string action)
     {
         var scopeList = System.Net.WebUtility.HtmlEncode(string.Join(", ", scopes));
         var name = System.Net.WebUtility.HtmlEncode(appName);
+        var formAction = System.Net.WebUtility.HtmlEncode(action);
 
         // POST body must contain all original OAuth params — OpenIddict reads only the body on POST
         var hiddenFields = string.Join("\n  ", queryString.TrimStart('?')
@@ -101,7 +107,7 @@ public sealed class AuthorizationController(IOpenIddictApplicationManager appMan
             <body style="font-family:sans-serif;max-width:480px;margin:4rem auto;padding:1rem">
               <h1 style="font-size:1.2rem">Authorize {name}</h1>
               <p>Scopes requested: <strong>{scopeList}</strong></p>
-              <form method="post" action="/connect/authorize">
+              <form method="post" action="{formAction}">
                 {hiddenFields}
                 <button name="decision" value="allow"
                   style="background:#2563eb;color:#fff;border:none;padding:.5rem 1.5rem;cursor:pointer">

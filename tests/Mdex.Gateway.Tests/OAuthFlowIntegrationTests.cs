@@ -173,6 +173,42 @@ public class OAuthFlowIntegrationTests : IDisposable
     }
 
     [Fact]
+    public async Task Full_pkce_flow_works_via_bare_endpoint_aliases()
+    {
+        // Clients that don't read discovery guess {base}/authorize and {base}/token. Prove the
+        // whole flow works over those alias paths, and that the consent form posts back to /authorize.
+        using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(30));
+        using var client = Factory().CreateClient(
+            new WebApplicationFactoryClientOptions { AllowAutoRedirect = false });
+
+        var (verifier, challenge) = MakePkce();
+        var url = "/authorize" + AuthUrl(challenge, "mdex:read", "alias1")["/connect/authorize".Length..];
+
+        var getResp = await client.GetAsync(url, cts.Token);
+        Assert.Equal(HttpStatusCode.OK, getResp.StatusCode);
+        Assert.Contains("action=\"/authorize\"", await getResp.Content.ReadAsStringAsync(cts.Token));
+
+        var form = ConsentForm(challenge, "mdex:read", "alias1", "allow");
+        var postResp = await client.PostAsync(url, form, cts.Token);
+        Assert.Equal(HttpStatusCode.Redirect, postResp.StatusCode);
+        var code = ExtractQueryParam(postResp.Headers.Location!.ToString(), "code");
+        Assert.NotEmpty(code);
+
+        var tokenForm = new FormUrlEncodedContent(new Dictionary<string, string>
+        {
+            ["grant_type"] = "authorization_code",
+            ["client_id"] = TestClientId,
+            ["client_secret"] = TestClientSecret,
+            ["code"] = code,
+            ["redirect_uri"] = TestRedirectUri,
+            ["code_verifier"] = verifier,
+        });
+        var tokenResp = await client.PostAsync("/token", tokenForm, cts.Token);   // bare alias
+        Assert.Equal(HttpStatusCode.OK, tokenResp.StatusCode);
+        Assert.NotEmpty(ExtractJsonField(await tokenResp.Content.ReadAsStringAsync(cts.Token), "access_token"));
+    }
+
+    [Fact]
     public async Task Read_scope_jwt_sees_only_read_tools()
     {
         using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(30));

@@ -68,8 +68,12 @@ builder.Services.AddOpenIddict()
     .AddCore(o => o.UseEntityFrameworkCore().UseDbContext<DbContext>())
     .AddServer(o =>
     {
-        o.SetAuthorizationEndpointUris("/connect/authorize");
-        o.SetTokenEndpointUris("/connect/token");
+        // Two URIs per endpoint: the canonical /connect/* paths (advertised in discovery, used by
+        // clients that read the AS metadata) plus the bare /authorize + /token convention paths.
+        // Some MCP clients (e.g. claude.ai's manual OAuth config) don't read discovery and guess
+        // {base}/authorize and {base}/token — serving both makes those work without discovery.
+        o.SetAuthorizationEndpointUris("/connect/authorize", "/authorize");
+        o.SetTokenEndpointUris("/connect/token", "/token");
 
         // Refresh tokens let clients (claude.ai/ChatGPT) renew an expired access token silently
         // instead of re-running the consent flow. Granted only when the client requests
