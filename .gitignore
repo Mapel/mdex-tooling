@@ -484,3 +484,7 @@ $RECYCLE.BIN/
 # OAuth client config (holds client secrets) — runtime file, never commit
 clients.json
 **/clients.json
+
+# Nix-Build-Ergebnis
+result
+result-*
